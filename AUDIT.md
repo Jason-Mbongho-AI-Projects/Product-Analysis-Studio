@@ -81,7 +81,7 @@ Verified against the specification. Nothing in the spec was implemented at basel
 | 43 | Auditability | None | **Done** | Agent, model, timestamp, evidence per finding |
 | 44 | Observability | None | **Done** | Runs, latency, failures, structured events |
 | 45 | Background jobs | None | **Done** | Thread pool, progress, cancel |
-| 46 | Database design | None | **Done** | 33 tables, FKs, indexes, 2 migrations |
+| 46 | Database design | None | **Done** | 36 tables, FKs, indexes, 2 migrations |
 | 47 | UX | Basic | **Done** | Executive cards, tabs, drilldowns, progressive disclosure |
 | 48/50 | Progressive analysis | None | **Done** | Section-ready events, live progress |
 | 49 | Onboarding | None | **Done** | Minimal, mode-aware |
