@@ -169,12 +169,12 @@ def _scenarios(service: StudioService, product: dict, analysis_id: str | None) -
             label_visibility="collapsed",
         )
         submitted = st.form_submit_button(
-            "Model this scenario", type="primary", use_container_width=True
+            "Model this scenario", type="primary", width="stretch"
         )
 
     cols = st.columns(2)
     for index, suggestion in enumerate(SUGGESTED_SCENARIOS):
-        if cols[index % 2].button(suggestion, key=f"scn_{index}", use_container_width=True):
+        if cols[index % 2].button(suggestion, key=f"scn_{index}", width="stretch"):
             st.session_state["scenario_prefill"] = suggestion
             st.rerun()
 

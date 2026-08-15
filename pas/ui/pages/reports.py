@@ -59,7 +59,7 @@ def render(service: StudioService, product: dict, analysis_id: str | None) -> No
                 file_name=report.filename,
                 mime="text/markdown",
                 key=f"md_{report_id}",
-                use_container_width=True,
+                width="stretch",
             )
             cols[1].download_button(
                 "HTML",
@@ -67,7 +67,7 @@ def render(service: StudioService, product: dict, analysis_id: str | None) -> No
                 file_name=report.filename.replace(".md", ".html"),
                 mime="text/html",
                 key=f"html_{report_id}",
-                use_container_width=True,
+                width="stretch",
             )
             with cols[2]:
                 with st.expander("Preview"):
@@ -83,14 +83,14 @@ def render(service: StudioService, product: dict, analysis_id: str | None) -> No
             data=evidence_report.markdown,
             file_name=evidence_report.filename,
             mime="text/markdown",
-            use_container_width=True,
+            width="stretch",
         )
         cols[1].download_button(
             "HTML",
             data=evidence_report.as_html(),
             file_name=evidence_report.filename.replace(".md", ".html"),
             mime="text/html",
-            use_container_width=True,
+            width="stretch",
         )
         cols[2].caption(
             f"{quality.get('total', 0)} claims across "
@@ -108,7 +108,7 @@ def render(service: StudioService, product: dict, analysis_id: str | None) -> No
         file_name="scores.csv",
         mime="text/csv",
         disabled=not data["scores"],
-        use_container_width=True,
+        width="stretch",
     )
     cols[1].download_button(
         "Competitors CSV",
@@ -116,7 +116,7 @@ def render(service: StudioService, product: dict, analysis_id: str | None) -> No
         file_name="competitors.csv",
         mime="text/csv",
         disabled=not data["competitors"],
-        use_container_width=True,
+        width="stretch",
     )
     cols[2].download_button(
         "Evidence CSV",
@@ -124,14 +124,14 @@ def render(service: StudioService, product: dict, analysis_id: str | None) -> No
         file_name="evidence.csv",
         mime="text/csv",
         disabled=not evidence,
-        use_container_width=True,
+        width="stretch",
     )
     cols[3].download_button(
         "Full JSON",
         data=service.export_json(analysis_id),
         file_name=f"analysis-{analysis_id}.json",
         mime="application/json",
-        use_container_width=True,
+        width="stretch",
     )
 
     st.caption(

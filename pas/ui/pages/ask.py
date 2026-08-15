@@ -40,13 +40,13 @@ def render(service: StudioService, product: dict, analysis_id: str | None) -> No
             height=90,
             label_visibility="collapsed",
         )
-        submitted = st.form_submit_button("Ask", type="primary", use_container_width=True)
+        submitted = st.form_submit_button("Ask", type="primary", width="stretch")
 
     st.markdown("**Try one of these**")
     suggestion_cols = st.columns(2)
     for index, suggestion in enumerate(SUGGESTED_QUESTIONS):
         with suggestion_cols[index % 2]:
-            if st.button(suggestion, key=f"sug_{index}", use_container_width=True):
+            if st.button(suggestion, key=f"sug_{index}", width="stretch"):
                 st.session_state["ask_prefill"] = suggestion
                 st.rerun()
 
@@ -108,7 +108,7 @@ def _render_answer(question: str, answer) -> None:
         if answer.followups:
             st.markdown("**Worth asking next**")
             for index, followup in enumerate(answer.followups):
-                if st.button(followup, key=f"fu_{index}", use_container_width=True):
+                if st.button(followup, key=f"fu_{index}", width="stretch"):
                     st.session_state["ask_prefill"] = followup
                     st.rerun()
 

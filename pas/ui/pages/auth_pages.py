@@ -50,7 +50,7 @@ def _login_form(service: StudioService) -> None:
     with st.form("login"):
         email = st.text_input("Email", autocomplete="username")
         password = st.text_input("Password", type="password", autocomplete="current-password")
-        submitted = st.form_submit_button("Sign in", type="primary", use_container_width=True)
+        submitted = st.form_submit_button("Sign in", type="primary", width="stretch")
 
     if not submitted:
         return
@@ -80,7 +80,7 @@ def _signup_form(service: StudioService, *, first_run: bool) -> None:
         )
         confirm = st.text_input("Confirm password", type="password")
         submitted = st.form_submit_button(
-            "Create account", type="primary", use_container_width=True
+            "Create account", type="primary", width="stretch"
         )
 
     if not submitted:
@@ -233,7 +233,7 @@ def _members_tab(service: StudioService) -> None:
                     )
             with action:
                 if can_manage and member["id"] != identity.user_id:
-                    if st.button("Remove", key=f"rm_{member['id']}", use_container_width=True):
+                    if st.button("Remove", key=f"rm_{member['id']}", width="stretch"):
                         try:
                             service.auth.remove_member(service.workspace_id, member["id"])
                             st.rerun()
@@ -281,7 +281,7 @@ def _members_tab(service: StudioService) -> None:
             format_func=lambda v: Role(v).label,
         )
         cols[2].markdown("<div style='height:1.85rem'></div>", unsafe_allow_html=True)
-        if cols[2].form_submit_button("Add", type="primary", use_container_width=True):
+        if cols[2].form_submit_button("Add", type="primary", width="stretch"):
             try:
                 service.auth.create_user(
                     email=email, password=password, name=name,
@@ -386,7 +386,7 @@ def _api_keys_tab(service: StudioService) -> None:
                     )
                 )
             if not key["revoked"] and action.button(
-                "Revoke", key=f"rvk_{key['id']}", use_container_width=True
+                "Revoke", key=f"rvk_{key['id']}", width="stretch"
             ):
                 service.revoke_api_key(key["id"])
                 st.rerun()
@@ -464,6 +464,6 @@ def _audit_tab(service: StudioService) -> None:
                 for e in entries
             ]
         ),
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
     )

@@ -147,7 +147,7 @@ def _render_header(service: StudioService, product: dict, analysis_id: str | Non
 
     with middle:
         st.write("")
-        if st.button("Run new version", use_container_width=True, type="primary"):
+        if st.button("Run new version", width="stretch", type="primary"):
             try:
                 new_id, _ = service.start_analysis(
                     product["id"], mode=product.get("mode", "founder")
@@ -159,7 +159,7 @@ def _render_header(service: StudioService, product: dict, analysis_id: str | Non
 
     with right:
         st.write("")
-        if len(versions) >= 2 and st.button("Compare versions", use_container_width=True):
+        if len(versions) >= 2 and st.button("Compare versions", width="stretch"):
             st.session_state["show_compare"] = not st.session_state.get("show_compare", False)
 
     if st.session_state.get("show_compare") and len(versions) >= 2:
@@ -215,11 +215,11 @@ def _render_progress(service: StudioService, analysis: dict) -> None:
 
     col_a, col_b = st.columns([1, 4])
     with col_a:
-        if st.button("Cancel", use_container_width=True):
+        if st.button("Cancel", width="stretch"):
             service.cancel_analysis(analysis["id"])
             st.rerun()
     with col_b:
-        if st.button("Refresh", use_container_width=True):
+        if st.button("Refresh", width="stretch"):
             st.rerun()
 
     if job:
@@ -517,7 +517,7 @@ def _tab_competitors(
             for c in competitors
         ]
     )
-    st.dataframe(matrix, use_container_width=True, hide_index=True)
+    st.dataframe(matrix, width="stretch", hide_index=True)
 
     st.caption(
         "Competitor detail is model knowledge unless a source was retrieved. "
@@ -560,12 +560,12 @@ def _tab_competitors(
                 if actions[0].button(
                     "Unpin" if pinned else "Pin to top",
                     key=f"pin_{competitor['id']}",
-                    use_container_width=True,
+                    width="stretch",
                 ):
                     service.pin_competitor(competitor["id"], not pinned)
                     st.rerun()
                 if actions[1].button(
-                    "Remove", key=f"delcmp_{competitor['id']}", use_container_width=True
+                    "Remove", key=f"delcmp_{competitor['id']}", width="stretch"
                 ):
                     service.remove_competitor(competitor["id"])
                     st.rerun()
@@ -856,7 +856,7 @@ def render_roadmap(service: StudioService, product: dict) -> None:
             format_func=lambda v: {"now": "Now (0-30d)", "next": "Next (30-90d)", "later": "Later (3-12m)"}[v],
         )
         cols[2].markdown("<div style='height:1.85rem'></div>", unsafe_allow_html=True)
-        if cols[2].form_submit_button("Add", use_container_width=True):
+        if cols[2].form_submit_button("Add", width="stretch"):
             try:
                 service.add_roadmap_item(product["id"], title, horizon=horizon)
                 st.rerun()
@@ -889,13 +889,13 @@ def render_roadmap(service: StudioService, product: dict) -> None:
                     # horizon is explicit.
                     order_cols = st.columns(2)
                     if order_cols[0].button(
-                        "↑", key=f"up_{item['id']}", use_container_width=True,
+                        "↑", key=f"up_{item['id']}", width="stretch",
                         help="Move up",
                     ):
                         service.reorder_roadmap_item(item["id"], -1)
                         st.rerun()
                     if order_cols[1].button(
-                        "↓", key=f"down_{item['id']}", use_container_width=True,
+                        "↓", key=f"down_{item['id']}", width="stretch",
                         help="Move down",
                     ):
                         service.reorder_roadmap_item(item["id"], 1)
@@ -906,12 +906,12 @@ def render_roadmap(service: StudioService, product: dict) -> None:
                     for move_col, target in zip(move_cols, targets):
                         if move_col.button(
                             f"→ {target}", key=f"mv_{item['id']}_{target}",
-                            use_container_width=True,
+                            width="stretch",
                         ):
                             service.move_roadmap_item(item["id"], target)
                             st.rerun()
                     if move_cols[2].button(
-                        "Remove", key=f"rm_{item['id']}", use_container_width=True
+                        "Remove", key=f"rm_{item['id']}", width="stretch"
                     ):
                         service.delete_roadmap_item(item["id"])
                         st.rerun()
@@ -1054,7 +1054,7 @@ def _tab_sources(service: StudioService, data: dict[str, Any]) -> None:
             for s in sources
         ]
     )
-    st.dataframe(frame, use_container_width=True, hide_index=True)
+    st.dataframe(frame, width="stretch", hide_index=True)
 
     failed = [s for s in sources if s["status"] in ("failed", "blocked")]
     if failed:
@@ -1112,7 +1112,7 @@ def _tab_audit(service: StudioService, product: dict, data: dict[str, Any]) -> N
                     for r in runs
                 ]
             ),
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
         )
     else:
@@ -1121,7 +1121,7 @@ def _tab_audit(service: StudioService, product: dict, data: dict[str, Any]) -> N
     if usage.get("by_model"):
         st.markdown("#### Cost by model")
         st.dataframe(
-            pd.DataFrame(usage["by_model"]), use_container_width=True, hide_index=True
+            pd.DataFrame(usage["by_model"]), width="stretch", hide_index=True
         )
 
     st.markdown("#### Strategic memory")

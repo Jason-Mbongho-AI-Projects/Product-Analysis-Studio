@@ -104,14 +104,14 @@ def _alert_centre(service: StudioService, product: dict) -> None:
 
             actions = st.columns(4)
             if alert["status"] == AlertStatus.UNREAD.value:
-                if actions[0].button("Mark read", key=f"rd_{alert['id']}", use_container_width=True):
+                if actions[0].button("Mark read", key=f"rd_{alert['id']}", width="stretch"):
                     service.set_alert_status(alert["id"], AlertStatus.READ.value)
                     st.rerun()
-            if actions[1].button("Add to roadmap", key=f"rm_{alert['id']}", use_container_width=True):
+            if actions[1].button("Add to roadmap", key=f"rm_{alert['id']}", width="stretch"):
                 service.alert_to_roadmap(alert["id"])
                 st.success("Added to roadmap and archived.")
                 st.rerun()
-            if actions[2].button("Ask AI", key=f"ak_{alert['id']}", use_container_width=True):
+            if actions[2].button("Ask AI", key=f"ak_{alert['id']}", width="stretch"):
                 st.session_state["ask_prefill"] = (
                     f"A competitor change was detected: {alert['title']}. "
                     "Is this a genuine threat to us, and what should we do?"
@@ -119,7 +119,7 @@ def _alert_centre(service: StudioService, product: dict) -> None:
                 st.session_state["route"] = "ask"
                 st.rerun()
             if alert["status"] != AlertStatus.ARCHIVED.value:
-                if actions[3].button("Archive", key=f"ar_{alert['id']}", use_container_width=True):
+                if actions[3].button("Archive", key=f"ar_{alert['id']}", width="stretch"):
                     service.set_alert_status(alert["id"], AlertStatus.ARCHIVED.value)
                     st.rerun()
 
@@ -147,7 +147,7 @@ def _monitors(service: StudioService, product: dict, analysis_id: str | None) ->
         cols = st.columns([2, 1])
         interval = cols[0].selectbox("Check frequency", list(INTERVALS), index=3)
         cols[1].markdown("<div style='height:1.85rem'></div>", unsafe_allow_html=True)
-        if cols[1].form_submit_button("Create", type="primary", use_container_width=True):
+        if cols[1].form_submit_button("Create", type="primary", width="stretch"):
             try:
                 service.create_monitor(
                     product["id"],
@@ -201,7 +201,7 @@ def _monitors(service: StudioService, product: dict, analysis_id: str | None) ->
                 "Running..." if running else "Check now",
                 key=f"run_{monitor['id']}",
                 disabled=running,
-                use_container_width=True,
+                width="stretch",
             ):
                 try:
                     service.run_monitor(monitor["id"])
@@ -211,11 +211,11 @@ def _monitors(service: StudioService, product: dict, analysis_id: str | None) ->
             if actions[1].button(
                 "Resume" if not monitor["enabled"] else "Pause",
                 key=f"tg_{monitor['id']}",
-                use_container_width=True,
+                width="stretch",
             ):
                 service.set_monitor_enabled(monitor["id"], not monitor["enabled"])
                 st.rerun()
-            if actions[2].button("Delete", key=f"dl_{monitor['id']}", use_container_width=True):
+            if actions[2].button("Delete", key=f"dl_{monitor['id']}", width="stretch"):
                 service.delete_monitor(monitor["id"])
                 st.rerun()
 
@@ -250,7 +250,7 @@ def _changes(service: StudioService, product: dict) -> None:
                 for c in changes
             ]
         ),
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
     )
 

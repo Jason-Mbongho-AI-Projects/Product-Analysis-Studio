@@ -78,7 +78,7 @@ def _themes(service: StudioService, product: dict, analysis_id: str | None) -> N
         if st.button(
             "Analyse feedback" if not analysis else "Re-analyse",
             type="primary",
-            use_container_width=True,
+            width="stretch",
         ):
             try:
                 with st.spinner("Clustering feedback into themes..."):
@@ -315,7 +315,7 @@ def _sources(service: StudioService, product: dict) -> None:
                 for b in batches
             ]
         ),
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
     )
 

@@ -132,7 +132,7 @@ def _sidebar(service: StudioService, product: dict | None) -> str:
         st.caption(f"{esc(identity.label)} · {identity.role.label}")
         if identity.is_dev:
             st.warning("Auth disabled (dev)", icon=":material/lock_open:")
-        elif st.button("Sign out", use_container_width=True):
+        elif st.button("Sign out", width="stretch"):
             token = st.session_state.pop(auth_pages.SESSION_TOKEN_KEY, "")
             if token:
                 service.auth.revoke_session(token)
@@ -199,7 +199,7 @@ def _diagnostics(service: StudioService) -> None:
         import pandas as pd
 
         st.dataframe(
-            pd.DataFrame(usage["by_model"]), use_container_width=True, hide_index=True
+            pd.DataFrame(usage["by_model"]), width="stretch", hide_index=True
         )
 
     jobs = _active_jobs()

@@ -212,7 +212,7 @@ def _pricing(pricing: dict[str, Any] | None) -> None:
                         for p in known
                     ]
                 ),
-                use_container_width=True,
+                width="stretch",
                 hide_index=True,
             )
         if unknown:
@@ -386,7 +386,7 @@ def _gtm(gtm: dict[str, Any] | None) -> None:
                     for e in experiments
                 ]
             ),
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
         )
 
@@ -460,7 +460,7 @@ def _simulator(service: StudioService, product: dict, analysis_id: str) -> None:
         fixed_costs = st.number_input(
             "Monthly fixed costs $", min_value=0.0, value=0.0, step=1000.0
         )
-        run = st.form_submit_button("Run simulation", type="primary", use_container_width=True)
+        run = st.form_submit_button("Run simulation", type="primary", width="stretch")
 
     if not run and "sim_results" not in st.session_state:
         return
@@ -555,7 +555,7 @@ def _simulator(service: StudioService, product: dict, analysis_id: str) -> None:
                 for s in curve
             ]
         ),
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
     )
 
@@ -601,7 +601,7 @@ def _simulator(service: StudioService, product: dict, analysis_id: str) -> None:
         cols = st.columns([3, 1])
         label = cols[0].text_input("Scenario name", placeholder="e.g. 20% price rise")
         cols[1].markdown("<div style='height:1.85rem'></div>", unsafe_allow_html=True)
-        if cols[1].form_submit_button("Save scenario", use_container_width=True):
+        if cols[1].form_submit_button("Save scenario", width="stretch"):
             service.save_scenario(
                 product["id"],
                 analysis_id,

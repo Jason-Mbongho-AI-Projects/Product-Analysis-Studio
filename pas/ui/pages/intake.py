@@ -128,7 +128,7 @@ def _render_new_analysis(service: StudioService) -> None:
             )
 
         submitted = st.form_submit_button(
-            "Run analysis", type="primary", use_container_width=True
+            "Run analysis", type="primary", width="stretch"
         )
 
     if not submitted:
@@ -191,14 +191,14 @@ def _render_library(service: StudioService) -> None:
                 )
                 st.caption(meta)
             with actions:
-                if st.button("Open", key=f"open_{product['id']}", use_container_width=True):
+                if st.button("Open", key=f"open_{product['id']}", width="stretch"):
                     latest = service.latest_analysis(product["id"])
                     st.session_state["active_product"] = product["id"]
                     st.session_state["active_analysis"] = latest["id"] if latest else None
                     st.session_state["route"] = "workroom"
                     st.rerun()
                 if st.button(
-                    "Delete", key=f"del_{product['id']}", use_container_width=True
+                    "Delete", key=f"del_{product['id']}", width="stretch"
                 ):
                     st.session_state[f"confirm_del_{product['id']}"] = True
 
