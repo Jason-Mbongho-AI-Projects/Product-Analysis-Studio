@@ -22,6 +22,7 @@ from .enums import (
     CompetitorType,
     EffortSize,
     EvidenceGrade,
+    FeedbackTheme,
     GrowthChannel,
     LaunchHorizon,
     MarketSegment,
@@ -29,8 +30,11 @@ from .enums import (
     ProductMaturity,
     RecommendationVerdict,
     ScoreDimension,
+    Sentiment,
+    SignalType,
     SourceType,
     ThreatLevel,
+    TimeHorizon,
 )
 
 
@@ -580,4 +584,127 @@ class ExecutiveSynthesis(Contract):
     key_uncertainties: list[str] = Field(
         description="What we could not establish, and what would resolve it."
     )
+    confidence: Confidence
+
+
+# --------------------------------------------------------------------------
+# Voice of Customer (spec 11)
+# --------------------------------------------------------------------------
+
+
+class FeedbackCluster(Contract):
+    """A recurring theme found across many pieces of feedback."""
+
+    label: str = Field(description="Short name for the theme, e.g. 'Onboarding is slow'.")
+    theme: FeedbackTheme
+    sentiment: Sentiment
+    summary: str = Field(description="What customers are actually saying, specifically.")
+    share_of_feedback: float = Field(
+        description="0-100. Percentage of the supplied feedback in this cluster."
+    )
+    item_count: int = Field(description="How many supplied items belong to this cluster.")
+    representative_quotes: list[str] = Field(
+        description=(
+            "Verbatim excerpts from the supplied feedback ONLY. Never invent or "
+            "paraphrase a quote. Empty list if none are quotable."
+        )
+    )
+    customer_language: list[str] = Field(
+        description="Recurring words and phrases customers themselves use."
+    )
+    is_churn_driver: bool
+    is_feature_request: bool
+    suggested_action: str
+    severity: AlertSeverity
+    confidence: Confidence
+
+
+class FeedbackAnalysis(Contract):
+    total_items_analysed: int = Field(
+        description="How many distinct pieces of feedback you were given."
+    )
+    overall_sentiment: Sentiment
+    sentiment_positive_pct: float = Field(description="0-100.")
+    sentiment_neutral_pct: float = Field(description="0-100.")
+    sentiment_negative_pct: float = Field(description="0-100.")
+    clusters: list[FeedbackCluster] = Field(
+        description="Ordered by share_of_feedback, largest first."
+    )
+    top_complaints: list[str]
+    top_praise: list[str]
+    unmet_needs: list[str]
+    emerging_trends: list[str] = Field(
+        description="Themes that look new or growing, if the data shows timing."
+    )
+    summary: str
+    caveats: list[str] = Field(
+        description="Sampling bias, small volume, or anything limiting these conclusions."
+    )
+
+
+# --------------------------------------------------------------------------
+# Opportunity and threat radar (spec 27 / 28)
+# --------------------------------------------------------------------------
+
+
+class RadarSignal(Contract):
+    title: str
+    signal_type: SignalType
+    category: str = Field(
+        description=(
+            "For opportunities: customer_pain, competitor_weakness, market_trend, "
+            "product_gap, technology, pricing, geographic, integration, partnership, "
+            "segment, distribution, regulatory. For threats: competitor, market, "
+            "technology_disruption, pricing_pressure, regulatory, churn, new_entrant, "
+            "substitute, platform_dependency, security, reputation."
+        )
+    )
+    description: str
+    why_now: str = Field(description="What makes this current rather than perennial.")
+    impact: float = Field(description="0-100 potential magnitude if it materialises.")
+    probability: float = Field(description="0-100 likelihood it materialises.")
+    horizon: TimeHorizon
+    supporting_evidence: list[str]
+    recommended_response: str
+    confidence: Confidence
+
+
+class RadarReport(Contract):
+    opportunities: list[RadarSignal]
+    threats: list[RadarSignal]
+    summary: str
+    biggest_opportunity: str
+    biggest_threat: str
+
+
+# --------------------------------------------------------------------------
+# Scenario simulation (spec 20)
+# --------------------------------------------------------------------------
+
+
+class ScenarioOutcome(Contract):
+    case: str = Field(description="One of: best, base, worst.")
+    narrative: str
+    revenue_impact: str
+    customer_impact: str
+    competitive_impact: str
+    probability: float = Field(description="0-100. The three cases should total ~100.")
+
+
+class ScenarioAnalysis(Contract):
+    """A what-if projection. Explicitly NOT a prediction."""
+
+    question: str = Field(description="Restate the scenario being modelled.")
+    assumptions: list[str] = Field(
+        description="Every assumption this projection rests on. Be exhaustive."
+    )
+    outcomes: list[ScenarioOutcome] = Field(
+        description="Exactly three: best, base and worst case."
+    )
+    leading_indicators: list[str] = Field(
+        description="What to watch to tell early which case is unfolding."
+    )
+    risks: list[str]
+    reversibility: str = Field(description="How hard would this be to undo?")
+    recommendation: str
     confidence: Confidence

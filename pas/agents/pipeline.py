@@ -24,6 +24,7 @@ from .strategists import (
     PositioningStrategistAgent,
     PricingStrategistAgent,
 )
+from .voice import RadarAgent
 
 #: Establish what is true about the product, market and competition.
 INTELLIGENCE_STAGE: list[type[Agent]] = [
@@ -45,8 +46,8 @@ STRATEGY_STAGE: list[type[Agent]] = [
     GTMStrategistAgent,
 ]
 
-#: Synthesis sees everything.
-SYNTHESIS_STAGE: list[type[Agent]] = [ChiefStrategyAgent]
+#: Radar reads the strategy output, then synthesis sees everything.
+SYNTHESIS_STAGE: list[type[Agent]] = [RadarAgent, ChiefStrategyAgent]
 
 FULL_PIPELINE: list[type[Agent]] = [
     *INTELLIGENCE_STAGE,

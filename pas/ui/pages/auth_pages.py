@@ -234,6 +234,28 @@ def _members_tab(service: StudioService) -> None:
                         except AuthError as exc:
                             st.error(str(exc))
 
+            if can_manage:
+                # There is no email-based reset flow, so recovery is an admin
+                # setting a new password directly.
+                with st.expander("Reset password"):
+                    with st.form(f"reset_{member['id']}", clear_on_submit=True):
+                        new_password = st.text_input(
+                            "New password",
+                            type="password",
+                            key=f"pw_{member['id']}",
+                            help=f"At least {MIN_PASSWORD_LENGTH} characters.",
+                        )
+                        if st.form_submit_button("Set password"):
+                            try:
+                                service.reset_member_password(member["id"], new_password)
+                            except (AuthError, PasswordError) as exc:
+                                st.error(str(exc), icon=":material/error:")
+                            else:
+                                st.success(
+                                    "Password set. All their sessions were signed out. "
+                                    "Share it securely and have them change it."
+                                )
+
     if not can_manage:
         st.caption("Your role does not allow managing members.")
         return

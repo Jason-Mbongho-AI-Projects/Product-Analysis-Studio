@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import sqlite3
+
 import pytest
 
 from pas.domain.enums import DecisionState
@@ -157,3 +159,90 @@ def test_usage_summary_aggregates_cost(conn, workspace, analysis):
     assert summary["calls"] == 3
     assert summary["cost"] == pytest.approx(0.013)
     assert len(summary["by_model"]) == 2
+
+
+# ---------------------------------------------------------------------------
+# Migration runner
+# ---------------------------------------------------------------------------
+
+
+def test_statement_splitter_handles_comments_and_literals():
+    from pas.storage.db import split_statements
+
+    script = """
+    -- a leading comment
+    CREATE TABLE t (a TEXT);
+    INSERT INTO t (a) VALUES ('has ; a semicolon');
+    -- trailing comment
+    CREATE INDEX ix ON t(a);
+    """
+    statements = split_statements(script)
+    assert len(statements) == 3
+    assert "has ; a semicolon" in statements[1]
+    assert statements[2].startswith("CREATE INDEX")
+
+
+def test_failed_migration_rolls_back_completely(tmp_path, monkeypatch):
+    """A migration that fails part-way must leave NOTHING behind.
+
+    `executescript` issues an implicit COMMIT, which previously let a failing
+    migration half-apply and then be unable to re-run.
+    """
+    from pas.storage import db as db_module
+
+    migrations = tmp_path / "migrations"
+    migrations.mkdir()
+    (migrations / "001_ok.sql").write_text(
+        "CREATE TABLE alpha (id TEXT PRIMARY KEY);", encoding="utf-8"
+    )
+    # The second statement is invalid, so the whole file must roll back.
+    (migrations / "002_broken.sql").write_text(
+        "CREATE TABLE beta (id TEXT PRIMARY KEY);\n"
+        "CREATE INDEX ix_dupe ON nonexistent_table(id);",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(db_module, "MIGRATIONS_DIR", migrations)
+
+    db_module.reset_thread_state()
+    conn = db_module.get_connection(tmp_path / "m.sqlite3")
+
+    with pytest.raises(sqlite3.OperationalError):
+        db_module.migrate(conn)
+
+    tables = {
+        row["name"]
+        for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+    }
+    assert "alpha" in tables, "the successful migration should have applied"
+    assert "beta" not in tables, "the failed migration must leave nothing behind"
+
+    applied = {row["name"] for row in conn.execute("SELECT name FROM schema_migrations")}
+    assert applied == {"001_ok.sql"}
+    db_module.reset_thread_state()
+
+
+def test_index_names_are_unique_across_migrations():
+    """SQLite index names are global, so a collision breaks migration."""
+    import re
+    from pas.storage.db import MIGRATIONS_DIR
+
+    seen: dict[str, str] = {}
+    for sql_file in sorted(MIGRATIONS_DIR.glob("*.sql")):
+        for name in re.findall(
+            r"CREATE\s+(?:UNIQUE\s+)?INDEX\s+(\w+)", sql_file.read_text(encoding="utf-8"), re.I
+        ):
+            assert name not in seen, (
+                f"index '{name}' declared in both {seen[name]} and {sql_file.name}"
+            )
+            seen[name] = sql_file.name
+
+
+def test_all_migrations_apply_to_a_fresh_database(tmp_path):
+    from pas.storage import db as db_module
+
+    db_module.reset_thread_state()
+    conn = db_module.get_connection(tmp_path / "fresh.sqlite3")
+    applied = db_module.migrate(conn)
+    assert len(applied) >= 4
+    assert db_module.migrate(conn) == [], "re-running must be a no-op"
+    db_module.reset_thread_state()

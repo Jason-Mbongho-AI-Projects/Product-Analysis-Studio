@@ -15,13 +15,25 @@ from ..config import load_config, network_exposure_warning
 from ..service import StudioService
 from . import theme
 from .components import esc, kpi
-from .pages import alerts, ask, auth_pages, intake, reports, strategy, workroom
+from .pages import (
+    alerts,
+    ask,
+    auth_pages,
+    intake,
+    radar,
+    reports,
+    strategy,
+    voice,
+    workroom,
+)
 
 #: route -> (label, requires a product, permission needed to see it)
 ROUTES: dict[str, tuple[str, bool, Permission]] = {
     "intake": ("Products", False, Permission.VIEW),
     "workroom": ("Analysis", True, Permission.VIEW),
     "strategy": ("Strategy", True, Permission.VIEW),
+    "radar": ("Radar", True, Permission.VIEW),
+    "voice": ("Customers", True, Permission.VIEW),
     "decide": ("Decide", True, Permission.VIEW),
     "ask": ("Ask", True, Permission.ASK),
     "alerts": ("Alerts", True, Permission.VIEW),
@@ -191,6 +203,31 @@ def _diagnostics(service: StudioService) -> None:
         for job in jobs:
             st.caption(f"{job.job_id} — {job.status} ({len(job.events)} events)")
 
+    st.markdown("#### Monitor scheduler")
+    state = service.scheduler_state()
+    if not service.config.scheduler_enabled:
+        st.caption(
+            "Disabled. Set PAS_SCHEDULER=true to run due monitors automatically "
+            "while the app is open, or point cron at run_due_monitors()."
+        )
+    elif state is None:
+        st.caption("Enabled but not yet started.")
+    else:
+        cols = st.columns(4)
+        cols[0].metric("Ticks", state.ticks)
+        cols[1].metric("Dispatched", state.dispatched)
+        cols[2].metric("Errors", state.errors)
+        cols[3].metric("Running", "yes" if state.running else "no")
+        if state.last_error:
+            st.caption(f"Last error: {state.last_error}")
+
+    if st.button("Run due monitors now"):
+        try:
+            count = service.run_due_monitors()
+            st.success(f"Dispatched {count} monitor(s).")
+        except Exception as exc:
+            st.error(str(exc))
+
 
 def main() -> None:
     st.set_page_config(
@@ -220,6 +257,7 @@ def main() -> None:
     # A per-run service bound to the resolved identity, so every permission
     # check below reflects the actual signed-in user.
     service = StudioService(config=base.config, identity=identity)
+    base.start_scheduler()
 
     _security_banner(service)
 
@@ -258,6 +296,10 @@ def _dispatch(service: StudioService, route: str, product: dict | None) -> None:
         workroom.render(service)
     elif route == "strategy":
         strategy.render(service, product, analysis_id)
+    elif route == "radar":
+        radar.render(service, product, analysis_id)
+    elif route == "voice":
+        voice.render(service, product, analysis_id)
     elif route == "decide":
         _decide(service, product, analysis_id)
     elif route == "ask":

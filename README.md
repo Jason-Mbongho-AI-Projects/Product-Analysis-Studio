@@ -31,6 +31,9 @@ verified fact.
 | **GTM studio** | Beachhead segment and a phased 30/60/90/6mo/12mo launch plan |
 | **Decision board** | Accept / reject / investigate / postpone, with decisions remembered |
 | **Roadmap** | Now / Next / Later, fed by accepted recommendations |
+| **Voice of Customer** | Reviews, interviews and tickets clustered into themes, with verbatim quotes checked against your own data |
+| **Opportunity & threat radar** | Signals ranked by expected value (impact x probability) |
+| **Scenario lab** | Open-ended what-ifs across best / base / worst cases |
 | **Ask** | Questions answered from stored intelligence, with verified citations |
 | **Monitoring & alerts** | Competitor change detection with a severity-ranked alert centre |
 | **Report studio** | Markdown / HTML / CSV / JSON exports that carry their evidence basis |
@@ -55,11 +58,13 @@ pas/
 ├── research/
 │   ├── safety.py         SSRF guard (the security boundary)
 │   ├── fetcher.py        Polite, size-capped, redirect-revalidating fetcher
+│   ├── documents.py      Upload parsing (CSV/TSV/JSON/TXT/PDF)
 │   └── engine.py         Provider-based research orchestration
 ├── agents/
 │   ├── base.py           Agent ABC: contracts, retry, observability, budget
 │   ├── analysts.py       Intelligence agents — "what is true"
 │   ├── strategists.py    Strategy agents — "what to do about it"
+│   ├── voice.py          Voice of Customer, radar and scenario agents
 │   ├── pipeline.py       Execution order (the dependency chain)
 │   └── orchestrator.py   Pipeline execution with progressive events
 ├── analysis/
@@ -72,7 +77,10 @@ pas/
 │   ├── migrations/       Versioned SQL
 │   ├── repositories.py   Workspace-scoped data access
 │   └── strategy_repo.py  Strategy, monitoring and conversation access
-├── jobs/runner.py        Background thread pool for long analyses
+├── auth/                 Passwords, roles, sessions, membership
+├── jobs/
+│   ├── runner.py         Background thread pool for long analyses
+│   └── scheduler.py      Periodic monitor dispatch
 ├── service.py            Application facade — the only thing the UI calls
 └── ui/                   Theme, components, pages
 ```
@@ -93,8 +101,11 @@ Twelve agents run in dependency order; each reads what earlier agents persisted:
 Intelligence   intake → product_analyst → competitive_intelligence
                → market_analyst → customer_intelligence → scoring → gap_analysis
 Strategy       → positioning → pricing → growth → gtm
-Synthesis      → chief_strategy
+Synthesis      → radar → chief_strategy
 ```
+
+Two agents run outside the pipeline, on demand: **voice_of_customer** (only when
+you have supplied feedback) and **scenario** (one what-if at a time).
 
 Each agent returns a **validated Pydantic contract**, not prose. A schema violation
 is a retryable error carrying the validation message back to the model. There is no
@@ -173,6 +184,8 @@ streamlit run app.py
 | `PAS_AUTH_ENABLED` | `false` | **Authentication. Off by default for local development.** |
 | `PAS_ALLOW_SIGNUP` | `true` | Whether strangers may create their own accounts. |
 | `PAS_DEFAULT_ROLE` | `viewer` | Role for accounts after the first (which becomes owner). |
+| `PAS_SCHEDULER` | `false` | Run due monitors automatically while the app is open. |
+| `PAS_SCHEDULER_TICK` | `300` | Seconds between scheduler checks. |
 | `PAS_FAST_MODEL` | `openai/gpt-4.1-mini` | Model for mechanical tasks |
 | `PAS_DEEP_MODEL` | `openai/gpt-4.1-mini` | Model for reasoning-heavy agents |
 | `PAS_DATA_DIR` | `./data` | SQLite location |
@@ -219,6 +232,21 @@ Coverage focuses on the paths where failure is expensive:
 | **Tenant isolation** | Every table carries `workspace_id`; every read is scoped. A valid session grants nothing in a workspace the user is not a member of. |
 | **Audit** | Every state change records actor, action, target and time. Audit writes are best-effort and can never roll back the operation they describe. |
 | **Deletion** | Deleting a product cascades to all derived intelligence via foreign keys. |
+
+---
+
+## Voice of Customer
+
+Upload reviews, interview notes, support tickets or survey exports — CSV, TSV,
+JSON/JSONL, TXT or PDF — or paste text directly. The text column is detected
+automatically; feedback is deduplicated by normalised content hash, so
+re-importing an overlapping export cannot inflate a theme's share.
+
+**Quotes are verified after the fact.** The agent is told never to invent a
+quote, and every quote it returns is then checked against your uploaded text.
+Anything that does not match is discarded and reported in the caveats. A quote
+you cannot find in your own data would destroy trust in every other finding, so
+this is enforced in code rather than left to the prompt.
 
 ---
 
@@ -303,7 +331,16 @@ Honest scope statement — see `AUDIT.md` for the full roadmap:
   development is unobstructed. Turn it on before anyone else can reach the app.
 - Sessions live in Streamlit's server-side state, so a server restart signs
   everyone out.
-- No password reset flow. An owner or admin sets a member's password directly.
+- No email-based password reset. An owner or admin sets a member's password
+  directly from the Members tab; doing so revokes that account's sessions.
+- The scheduler runs only while the app process is alive. For unattended
+  monitoring, point cron at `StudioService.run_due_monitors()`.
+- Retrieval for Ask ranks by grade- and confidence-weighted keyword overlap.
+  Embeddings would improve recall on paraphrased questions.
+- No public API. The service layer is clean enough to expose one, but the spec
+  scoped that out of this phase.
+- Research covers your own site and URLs you supply. Review sites, app stores,
+  news and job postings are designed for but not implemented.
 
 ---
 

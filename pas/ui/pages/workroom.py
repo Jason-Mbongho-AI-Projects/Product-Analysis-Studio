@@ -14,9 +14,11 @@ import streamlit as st
 
 from ...domain.enums import (
     AnalysisStatus,
+    CompetitorType,
     DecisionState,
     RoadmapHorizon,
     ScoreDimension,
+    ThreatLevel,
 )
 from ...service import StudioService
 from ..components import (
@@ -91,11 +93,11 @@ def render(service: StudioService) -> None:
         ]
     )
     with tabs[0]:
-        _tab_executive(data)
+        _tab_executive(data, analysis.get("mode", "founder"))
     with tabs[1]:
         _tab_product(service, analysis_id, data)
     with tabs[2]:
-        _tab_competitors(data)
+        _tab_competitors(data, service, analysis_id)
     with tabs[3]:
         _tab_market(service, analysis_id, data)
     with tabs[4]:
@@ -245,7 +247,43 @@ def _render_progress(service: StudioService, analysis: dict) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _tab_executive(data: dict[str, Any]) -> None:
+#: What each mode leads with (spec 58-62). The same intelligence, ordered for
+#: the question that reader actually has.
+MODE_FRAMING: dict[str, dict[str, Any]] = {
+    "founder": {
+        "question": "Is this worth building, and what do I do first?",
+        "lead": ["verdict", "actions", "risks"],
+        "kpi": ("Product score", "Must build", "Biggest risk", "Evidence"),
+    },
+    "product_manager": {
+        "question": "What should the team build next?",
+        "lead": ["gaps", "actions", "roadmap"],
+        "kpi": ("Must build", "Competitor gaps", "Customer themes", "Evidence"),
+    },
+    "executive": {
+        "question": "Where are the threats and where should we invest?",
+        "lead": ["risks", "opportunities", "verdict"],
+        "kpi": ("Product score", "Critical threats", "Top opportunities", "Evidence"),
+    },
+    "investor": {
+        "question": "Is this defensible, and what could kill it?",
+        "lead": ["market", "defensibility", "risks"],
+        "kpi": ("Product score", "Market size", "Defensibility", "Evidence"),
+    },
+    "consultant": {
+        "question": "What is the client-ready finding?",
+        "lead": ["verdict", "gaps", "evidence"],
+        "kpi": ("Product score", "Findings", "Evidence quality", "Sources"),
+    },
+}
+
+
+def _tab_executive(data: dict[str, Any], mode: str = "founder") -> None:
+    framing = MODE_FRAMING.get(mode, MODE_FRAMING["founder"])
+    st.caption(
+        f":material/visibility: **{mode.replace('_', ' ').title()} view** — "
+        f"{framing['question']}"
+    )
     composite = data["composite"]
     scores = data["scores"]
     recommendations = data["recommendations"]
@@ -285,6 +323,9 @@ def _tab_executive(data: dict[str, Any]) -> None:
         empty_state("No intelligence was produced for this analysis.")
         return
 
+    radar_signals = data.get("radar") or {"opportunities": [], "threats": []}
+    _mode_highlights(mode, data, radar_signals)
+
     left, right = st.columns([3, 2])
 
     with left:
@@ -322,6 +363,78 @@ def _tab_executive(data: dict[str, Any]) -> None:
                 "Inverted dimensions (competitive pressure, acquisition difficulty, "
                 "implementation complexity) are shown flipped so higher is always better."
             )
+
+
+def _mode_highlights(mode: str, data: dict[str, Any], radar_signals: dict) -> None:
+    """Surface what this reader cares about most, above the common view."""
+    threats = radar_signals.get("threats", [])
+    opportunities = radar_signals.get("opportunities", [])
+
+    if mode == "executive" and (threats or opportunities):
+        cols = st.columns(2)
+        with cols[0]:
+            st.markdown("##### Top threats")
+            for signal in threats[:3]:
+                st.markdown(
+                    f"- **{esc(signal['title'])}** "
+                    f"<span style='color:{PALETTE['muted']};font-size:0.8rem'>"
+                    f"(priority {signal['priority_score']:.0f})</span>",
+                    unsafe_allow_html=True,
+                )
+        with cols[1]:
+            st.markdown("##### Top opportunities")
+            for signal in opportunities[:3]:
+                st.markdown(
+                    f"- **{esc(signal['title'])}** "
+                    f"<span style='color:{PALETTE['muted']};font-size:0.8rem'>"
+                    f"(priority {signal['priority_score']:.0f})</span>",
+                    unsafe_allow_html=True,
+                )
+        st.markdown("---")
+
+    elif mode == "investor":
+        market = data.get("market")
+        profile = data.get("profile")
+        cols = st.columns(2)
+        with cols[0]:
+            st.markdown("##### Market sizing")
+            if market and market["sizing"]:
+                for model in market["sizing"]:
+                    st.markdown(
+                        f"- **{esc(model['label'])}** ${model['value_usd']:,.0f} "
+                        f"<span style='color:{PALETTE['muted']};font-size:0.8rem'>"
+                        f"({model['confidence']:.0%} confidence)</span>",
+                        unsafe_allow_html=True,
+                    )
+                st.caption("Derived estimates, not measured market data.")
+            else:
+                st.caption("No sizing available.")
+        with cols[1]:
+            st.markdown("##### Defensibility")
+            st.caption((profile or {}).get("defensibility") or "Not assessed.")
+            if threats:
+                st.markdown("##### Biggest risk")
+                st.caption(threats[0]["title"])
+        st.markdown("---")
+
+    elif mode == "product_manager":
+        recommendations = data.get("recommendations", [])
+        must = [r for r in recommendations if r["verdict"] == "must_build"]
+        avoid = [r for r in recommendations if r["verdict"] == "do_not_build"]
+        cols = st.columns(2)
+        with cols[0]:
+            st.markdown("##### Build next")
+            for rec in must[:4]:
+                st.markdown(f"- **{esc(rec['title'])}** (effort {rec['effort'].upper()})")
+            if not must:
+                st.caption("Nothing rated must-build.")
+        with cols[1]:
+            st.markdown("##### Do not build")
+            for rec in avoid[:4]:
+                st.markdown(f"- {esc(rec['title'])}")
+            if not avoid:
+                st.caption("Nothing ruled out.")
+        st.markdown("---")
 
 
 def _tab_product(service: StudioService, analysis_id: str, data: dict[str, Any]) -> None:
@@ -375,8 +488,16 @@ def _tab_product(service: StudioService, analysis_id: str, data: dict[str, Any])
         st.markdown(f"**Defensibility:** {esc(profile['defensibility'])}")
 
 
-def _tab_competitors(data: dict[str, Any]) -> None:
+def _tab_competitors(
+    data: dict[str, Any],
+    service: "StudioService | None" = None,
+    analysis_id: str | None = None,
+) -> None:
     competitors = data["competitors"]
+
+    if service is not None and analysis_id:
+        _add_competitor_form(service, analysis_id)
+
     if not competitors:
         empty_state("No competitors were identified for this version.")
         return
@@ -432,6 +553,61 @@ def _tab_competitors(data: dict[str, Any]) -> None:
                     st.markdown(f"- {esc(item)}")
             if competitor["features"]:
                 st.markdown("**Known features:** " + ", ".join(esc(f) for f in competitor["features"]))
+
+            if service is not None:
+                actions = st.columns(2)
+                pinned = bool(competitor["pinned"])
+                if actions[0].button(
+                    "Unpin" if pinned else "Pin to top",
+                    key=f"pin_{competitor['id']}",
+                    use_container_width=True,
+                ):
+                    service.pin_competitor(competitor["id"], not pinned)
+                    st.rerun()
+                if actions[1].button(
+                    "Remove", key=f"delcmp_{competitor['id']}", use_container_width=True
+                ):
+                    service.remove_competitor(competitor["id"])
+                    st.rerun()
+
+
+def _add_competitor_form(service: StudioService, analysis_id: str) -> None:
+    """Let the user add a competitor the discovery agent missed (spec 7)."""
+    with st.expander("Add a competitor"):
+        with st.form("add_competitor", clear_on_submit=True):
+            cols = st.columns([2, 2, 1])
+            name = cols[0].text_input("Name")
+            website = cols[1].text_input("Website (optional)")
+            competitor_type = cols[2].selectbox(
+                "Type",
+                [t.value for t in CompetitorType],
+                format_func=lambda v: v.replace("_", " ").title(),
+            )
+            positioning = st.text_input("How do they position themselves?")
+            cols = st.columns([3, 1])
+            rationale = cols[0].text_input("Why are they a competitor to you?")
+            threat = cols[1].selectbox("Threat", [t.value for t in ThreatLevel], index=2)
+
+            if st.form_submit_button("Add competitor", type="primary"):
+                try:
+                    service.add_competitor(
+                        analysis_id,
+                        {
+                            "name": name,
+                            "website": website,
+                            "competitor_type": competitor_type,
+                            "positioning": positioning,
+                            "rationale": rationale,
+                            "threat_level": threat,
+                        },
+                    )
+                    st.rerun()
+                except ValueError as exc:
+                    st.error(str(exc), icon=":material/error:")
+        st.caption(
+            "Competitors you add are graded 'user supplied' rather than presented "
+            "as a researched finding."
+        )
 
 
 def _tab_market(service: StudioService, analysis_id: str, data: dict[str, Any]) -> None:

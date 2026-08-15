@@ -380,3 +380,85 @@ class AnalysisMode(StrEnum):
     @property
     def label(self) -> str:
         return self.value.replace("_", " ").title()
+
+
+class FeedbackSource(StrEnum):
+    """Where a piece of customer feedback came from (spec 11)."""
+
+    REVIEW = "review"
+    APP_REVIEW = "app_review"
+    INTERVIEW = "interview"
+    SURVEY = "survey"
+    SUPPORT_TICKET = "support_ticket"
+    SALES_CALL = "sales_call"
+    CRM_NOTE = "crm_note"
+    FORUM = "forum"
+    SOCIAL = "social"
+    NPS = "nps"
+    UPLOAD = "upload"
+    OTHER = "other"
+
+    @property
+    def label(self) -> str:
+        return self.value.replace("_", " ").title()
+
+
+class Sentiment(StrEnum):
+    POSITIVE = "positive"
+    NEUTRAL = "neutral"
+    NEGATIVE = "negative"
+    MIXED = "mixed"
+
+    @property
+    def colour_key(self) -> str:
+        return self.value
+
+
+class FeedbackTheme(StrEnum):
+    """What a cluster of feedback is fundamentally about."""
+
+    PRICING = "pricing"
+    ONBOARDING = "onboarding"
+    USABILITY = "usability"
+    PERFORMANCE = "performance"
+    RELIABILITY = "reliability"
+    MISSING_FEATURE = "missing_feature"
+    INTEGRATIONS = "integrations"
+    MOBILE = "mobile"
+    SUPPORT = "support"
+    DOCUMENTATION = "documentation"
+    SECURITY = "security"
+    BILLING = "billing"
+    PRAISE = "praise"
+    OTHER = "other"
+
+    @property
+    def label(self) -> str:
+        return self.value.replace("_", " ").title()
+
+
+class SignalType(StrEnum):
+    """Radar entries (spec 27 / 28)."""
+
+    OPPORTUNITY = "opportunity"
+    THREAT = "threat"
+
+
+class TimeHorizon(StrEnum):
+    IMMEDIATE = "immediate"
+    NEAR_TERM = "near_term"
+    MEDIUM_TERM = "medium_term"
+    LONG_TERM = "long_term"
+
+    @property
+    def label(self) -> str:
+        return {
+            "immediate": "Now (0-3 months)",
+            "near_term": "Near (3-6 months)",
+            "medium_term": "Medium (6-12 months)",
+            "long_term": "Long (12+ months)",
+        }[self.value]
+
+    @property
+    def rank(self) -> int:
+        return ["immediate", "near_term", "medium_term", "long_term"].index(self.value)

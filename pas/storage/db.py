@@ -67,8 +67,38 @@ def _applied_versions(conn: sqlite3.Connection) -> set[int]:
     return {row["version"] for row in conn.execute("SELECT version FROM schema_migrations")}
 
 
+def split_statements(script: str) -> list[str]:
+    """Split a SQL script into individual statements.
+
+    ``sqlite3.complete_statement`` understands string literals and nested
+    BEGIN...END blocks, so this is safe where naive splitting on ";" is not.
+    """
+    statements: list[str] = []
+    buffer = ""
+
+    for line in script.splitlines():
+        stripped = line.strip()
+        # Skip whole-line comments so a trailing comment cannot look like an
+        # incomplete statement.
+        if not stripped or stripped.startswith("--"):
+            continue
+        buffer += line + "\n"
+        if sqlite3.complete_statement(buffer):
+            statements.append(buffer.strip())
+            buffer = ""
+
+    if buffer.strip():
+        statements.append(buffer.strip())
+    return statements
+
+
 def migrate(conn: sqlite3.Connection | None = None, db_path: Path | None = None) -> list[str]:
-    """Apply any pending migrations. Returns the names applied."""
+    """Apply any pending migrations atomically. Returns the names applied.
+
+    Statements are executed individually rather than via ``executescript``,
+    which issues an implicit COMMIT and would silently defeat the surrounding
+    transaction - leaving a failed migration half-applied and unable to re-run.
+    """
     from datetime import datetime, timezone
 
     conn = conn or get_connection(db_path)
@@ -79,12 +109,33 @@ def migrate(conn: sqlite3.Connection | None = None, db_path: Path | None = None)
         version = int(sql_file.stem.split("_", 1)[0])
         if version in applied:
             continue
-        with transaction(conn):
-            conn.executescript(sql_file.read_text(encoding="utf-8"))
+
+        statements = split_statements(sql_file.read_text(encoding="utf-8"))
+
+        # Python's sqlite3 opens implicit transactions for DML only - DDL runs
+        # in autocommit, so a CREATE TABLE would survive a rollback. Manual
+        # transaction control is required to make schema changes atomic.
+        # SQLite itself supports transactional DDL; the driver is the obstacle.
+        previous_isolation = conn.isolation_level
+        conn.isolation_level = None
+        try:
+            conn.execute("BEGIN")
+            for statement in statements:
+                conn.execute(statement)
             conn.execute(
                 "INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)",
                 (version, sql_file.name, datetime.now(timezone.utc).isoformat()),
             )
+            conn.execute("COMMIT")
+        except Exception:
+            try:
+                conn.execute("ROLLBACK")
+            except sqlite3.Error:  # pragma: no cover - nothing to roll back
+                pass
+            raise
+        finally:
+            conn.isolation_level = previous_isolation
+
         executed.append(sql_file.name)
 
     return executed

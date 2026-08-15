@@ -66,6 +66,9 @@ ALL_CONTRACTS = [
     C.GTMPlan,
     C.ChangeReport,
     C.CitedAnswer,
+    C.FeedbackAnalysis,
+    C.RadarReport,
+    C.ScenarioAnalysis,
 ]
 
 

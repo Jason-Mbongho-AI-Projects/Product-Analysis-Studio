@@ -39,6 +39,12 @@ RESEARCH_MAX_PAGES_PER_DOMAIN = int(os.getenv("PAS_MAX_PAGES_PER_DOMAIN", "6"))
 # Guard rail so a runaway analysis cannot silently burn budget (spec 38).
 MAX_LLM_CALLS_PER_ANALYSIS = int(os.getenv("PAS_MAX_LLM_CALLS", "60"))
 
+# In-process monitor scheduler (spec 33). Off by default: it spends money on a
+# timer, which should always be a deliberate choice rather than a side effect of
+# leaving the app running.
+SCHEDULER_ENABLED = os.getenv("PAS_SCHEDULER", "").lower() in {"1", "true", "yes", "on"}
+SCHEDULER_TICK_SECONDS = int(os.getenv("PAS_SCHEDULER_TICK", "300"))
+
 
 # Authentication (spec 41).
 #
@@ -70,6 +76,7 @@ class AppConfig:
     offline: bool = False
     auth_enabled: bool = AUTH_ENABLED
     allow_signup: bool = ALLOW_SELF_SIGNUP
+    scheduler_enabled: bool = SCHEDULER_ENABLED
     default_role: str = DEFAULT_MEMBER_ROLE
     allowed_schemes: tuple[str, ...] = field(default=("http", "https"))
 
@@ -93,6 +100,7 @@ def load_config() -> AppConfig:
         offline=os.getenv("PAS_OFFLINE", "").lower() in {"1", "true", "yes"},
         auth_enabled=AUTH_ENABLED,
         allow_signup=ALLOW_SELF_SIGNUP,
+        scheduler_enabled=SCHEDULER_ENABLED,
         default_role=DEFAULT_MEMBER_ROLE,
     )
 

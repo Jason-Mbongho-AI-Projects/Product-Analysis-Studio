@@ -447,3 +447,177 @@ def test_account_page_renders_in_open_mode(app):
     _assert_clean(at)
     rendered = " ".join(str(m.value) for m in at.markdown)
     assert "Account & access" in rendered
+
+
+# ---------------------------------------------------------------------------
+# Voice of Customer, radar and scenario pages
+# ---------------------------------------------------------------------------
+
+
+def _product_with_analysis(conn, name="P"):
+    workspace = repo.ensure_default_workspace(conn)
+    product = repo.create_product(
+        conn, workspace_id=workspace, name=name, intake_kind="idea", intake_input="idea"
+    )
+    analysis = repo.create_analysis(conn, workspace_id=workspace, product_id=product)["id"]
+    repo.update_analysis_progress(conn, analysis, status="complete", completed=True)
+    return workspace, product, analysis
+
+
+def test_voice_page_renders_empty_and_populated(app, tmp_path):
+    from pas.research.documents import FeedbackRecord
+    from pas.storage import db as db_module
+    from pas.storage import voc_repo
+
+    conn = db_module.get_connection(tmp_path / "ui.sqlite3")
+    db_module.migrate(conn)
+    workspace, product, analysis = _product_with_analysis(conn, "VoC")
+
+    at = app.run()
+    at.session_state["route"] = "voice"
+    at.session_state["active_product"] = product
+    at.session_state["active_analysis"] = analysis
+    at.run()
+    _assert_clean(at)
+
+    batch = voc_repo.create_batch(
+        conn, workspace_id=workspace, product_id=product, label="Reviews",
+        source_type="review",
+    )
+    voc_repo.add_feedback_items(
+        conn, workspace_id=workspace, product_id=product, batch_id=batch,
+        records=[FeedbackRecord(content="Onboarding took three days and we nearly quit")],
+    )
+    voc_repo.save_feedback_analysis(
+        conn, workspace_id=workspace, product_id=product, analysis_id=analysis,
+        data={
+            "total_items_analysed": 1, "overall_sentiment": "negative",
+            "sentiment_positive_pct": 0, "sentiment_neutral_pct": 0,
+            "sentiment_negative_pct": 100, "summary": "Onboarding dominates.",
+            "top_complaints": ["Onboarding"], "top_praise": [], "unmet_needs": [],
+            "emerging_trends": [], "caveats": ["Tiny sample"],
+            "clusters": [{
+                "label": "Onboarding friction", "theme": "onboarding",
+                "sentiment": "negative", "summary": "Setup is slow.",
+                "share_of_feedback": 100, "item_count": 1,
+                "representative_quotes": ["Onboarding took three days and we nearly quit"],
+                "customer_language": ["took three days"], "is_churn_driver": True,
+                "is_feature_request": False, "severity": "high",
+                "suggested_action": "Shorten setup", "confidence": 0.7,
+            }],
+        },
+    )
+
+    at = app.run()
+    at.session_state["route"] = "voice"
+    at.session_state["active_product"] = product
+    at.session_state["active_analysis"] = analysis
+    at.run()
+    _assert_clean(at)
+
+    rendered = " ".join(str(m.value) for m in at.markdown)
+    assert "Onboarding friction" in rendered
+    assert "churn driver" in rendered
+
+
+def test_radar_page_renders(app, tmp_path):
+    from pas.storage import db as db_module
+    from pas.storage import voc_repo
+
+    conn = db_module.get_connection(tmp_path / "ui.sqlite3")
+    db_module.migrate(conn)
+    workspace, product, analysis = _product_with_analysis(conn, "Radar")
+    voc_repo.save_radar(
+        conn, workspace_id=workspace, analysis_id=analysis, product_id=product,
+        signals=[
+            {"signal_type": "opportunity", "title": "Compliance whitespace",
+             "category": "market_trend", "description": "d", "why_now": "w",
+             "impact": 80, "probability": 60, "horizon": "near_term",
+             "recommended_response": "r", "supporting_evidence": ["e"], "confidence": 0.6},
+            {"signal_type": "threat", "title": "Incumbent bundling",
+             "category": "competitor", "description": "d", "why_now": "w",
+             "impact": 70, "probability": 50, "horizon": "medium_term",
+             "recommended_response": "r", "supporting_evidence": [], "confidence": 0.5},
+        ],
+    )
+
+    at = app.run()
+    at.session_state["route"] = "radar"
+    at.session_state["active_product"] = product
+    at.session_state["active_analysis"] = analysis
+    at.run()
+    _assert_clean(at)
+    assert "Compliance whitespace" in " ".join(str(m.value) for m in at.markdown)
+
+
+def test_radar_page_handles_no_signals(app, tmp_path):
+    from pas.storage import db as db_module
+
+    conn = db_module.get_connection(tmp_path / "ui.sqlite3")
+    db_module.migrate(conn)
+    _workspace, product, analysis = _product_with_analysis(conn, "Empty radar")
+
+    at = app.run()
+    at.session_state["route"] = "radar"
+    at.session_state["active_product"] = product
+    at.session_state["active_analysis"] = analysis
+    at.run()
+    _assert_clean(at)
+
+
+@pytest.mark.parametrize("mode", ["founder", "product_manager", "executive", "investor", "consultant"])
+def test_every_mode_renders_the_executive_view(app, tmp_path, mode):
+    """Each mode reorders the same intelligence; none may crash."""
+    from pas.storage import db as db_module
+
+    conn = db_module.get_connection(tmp_path / "ui.sqlite3")
+    db_module.migrate(conn)
+    workspace = repo.ensure_default_workspace(conn)
+    product = repo.create_product(
+        conn, workspace_id=workspace, name=f"Mode {mode}", intake_kind="idea",
+        intake_input="idea",
+    )
+    analysis = repo.create_analysis(
+        conn, workspace_id=workspace, product_id=product, mode=mode
+    )["id"]
+    repo.update_analysis_progress(conn, analysis, status="complete", completed=True)
+    repo.save_scores(conn, analysis, [
+        {"dimension": "market_opportunity", "score": 70, "confidence": 0.6,
+         "explanation": "e", "assumptions": [], "supporting_evidence": []}
+    ])
+    repo.save_recommendations(
+        conn, workspace_id=workspace, analysis_id=analysis, product_id=product,
+        recommendations=[
+            {"title": "Ship SSO", "gap_category": "security", "verdict": "must_build",
+             "reason": "r", "priority": 1, "confidence": 0.8},
+            {"title": "Build wearable app", "gap_category": "mobile",
+             "verdict": "do_not_build", "reason": "no demand", "priority": 9,
+             "confidence": 0.5},
+        ],
+    )
+    conn.commit()
+
+    at = app.run()
+    at.session_state["route"] = "workroom"
+    at.session_state["active_product"] = product
+    at.session_state["active_analysis"] = analysis
+    at.run()
+    _assert_clean(at)
+
+    captions = " ".join(str(c.value) for c in at.caption)
+    assert mode.replace("_", " ").title() in captions, "the mode must be stated"
+
+
+def test_competitor_add_form_renders(app, tmp_path):
+    from pas.storage import db as db_module
+
+    conn = db_module.get_connection(tmp_path / "ui.sqlite3")
+    db_module.migrate(conn)
+    _workspace, product, analysis = _product_with_analysis(conn, "Comp")
+
+    at = app.run()
+    at.session_state["route"] = "workroom"
+    at.session_state["active_product"] = product
+    at.session_state["active_analysis"] = analysis
+    at.run()
+    _assert_clean(at)

@@ -251,6 +251,7 @@ class StudioService:
             "sources": repo.list_sources(conn, analysis_id),
             "usage": repo.usage_summary(conn, self.workspace_id, analysis_id),
             "runs": repo.list_agent_runs(conn, analysis_id),
+            "radar": self.radar(analysis_id),
         }
 
     def evidence(self, analysis_id: str, **filters: Any) -> list[dict[str, Any]]:
@@ -625,6 +626,303 @@ class StudioService:
         if product is None:
             raise ValueError("Product not found.")
         return reports.full_export_json(data, product, self.evidence(analysis_id, limit=1000))
+
+    # -- Voice of Customer (spec 11) --------------------------------------
+
+    def ingest_feedback_text(
+        self, product_id: str, label: str, text: str, source_type: str = "upload"
+    ) -> dict[str, Any]:
+        """Store pasted feedback, splitting it into individual items."""
+        self.require(Permission.MANAGE_SOURCES)
+        from .research.documents import deduplicate, parse_pasted_feedback
+
+        parsed = parse_pasted_feedback(text)
+        return self._store_feedback(product_id, label, parsed, source_type, "")
+
+    def ingest_feedback_file(
+        self, product_id: str, label: str, filename: str, data: bytes,
+        source_type: str = "upload",
+    ) -> dict[str, Any]:
+        """Store feedback from an uploaded CSV/JSON/TXT/PDF export."""
+        self.require(Permission.MANAGE_SOURCES)
+        from .research.documents import parse_upload
+
+        parsed = parse_upload(filename, data, as_feedback=True)
+        return self._store_feedback(product_id, label, parsed, source_type, filename)
+
+    def _store_feedback(
+        self, product_id: str, label: str, parsed, source_type: str, filename: str
+    ) -> dict[str, Any]:
+        from .research.documents import deduplicate
+        from .storage import voc_repo
+
+        records, in_batch_duplicates = deduplicate(parsed.records)
+        batch_id = voc_repo.create_batch(
+            self.conn,
+            workspace_id=self.workspace_id,
+            product_id=product_id,
+            label=label or filename or "Pasted feedback",
+            source_type=source_type,
+            filename=filename,
+        )
+        inserted, duplicates = voc_repo.add_feedback_items(
+            self.conn,
+            workspace_id=self.workspace_id,
+            product_id=product_id,
+            batch_id=batch_id,
+            records=records,
+            source_type=source_type,
+        )
+        self._audit("feedback.ingested", target_type="feedback_batch",
+                    target_id=batch_id, detail=f"{inserted} items")
+        return {
+            "batch_id": batch_id,
+            "inserted": inserted,
+            "duplicates": duplicates + in_batch_duplicates,
+            "warnings": parsed.warnings,
+        }
+
+    def feedback_batches(self, product_id: str) -> list[dict[str, Any]]:
+        from .storage import voc_repo
+
+        return voc_repo.list_batches(self.conn, product_id)
+
+    def feedback_count(self, product_id: str) -> int:
+        from .storage import voc_repo
+
+        return voc_repo.feedback_item_count(self.conn, product_id)
+
+    def delete_feedback_batch(self, batch_id: str) -> None:
+        self.require(Permission.MANAGE_SOURCES)
+        from .storage import voc_repo
+
+        voc_repo.delete_batch(self.conn, batch_id)
+
+    def analyse_feedback(self, product_id: str, analysis_id: str | None = None):
+        """Cluster stored feedback into themes. Returns the stored analysis."""
+        self.require(Permission.RUN_ANALYSIS)
+        if not self.config.is_configured:
+            raise ValueError("No OPENROUTER_API_KEY configured.")
+
+        from .agents.base import AnalysisContext
+        from .agents.voice import VoiceOfCustomerAgent
+        from .storage import voc_repo
+
+        product = self.get_product(product_id)
+        if product is None:
+            raise ValueError("Product not found.")
+
+        items = voc_repo.list_feedback_items(self.conn, product_id)
+        if not items:
+            raise ValueError("Add some customer feedback before analysing it.")
+
+        analysis_id = analysis_id or (self.latest_analysis(product_id) or {}).get("id")
+        if analysis_id is None:
+            raise ValueError("Run a product analysis first.")
+
+        ctx = AnalysisContext(
+            conn=self.conn,
+            config=self.config,
+            provider=self._provider(),
+            workspace_id=self.workspace_id,
+            analysis_id=analysis_id,
+            product=dict(product),
+        )
+        agent = VoiceOfCustomerAgent(items)
+        result = agent.run(ctx)
+        if result is None:
+            raise ValueError("Feedback analysis did not complete. See the audit tab.")
+
+        self._audit("feedback.analysed", target_type="product", target_id=product_id,
+                    detail=f"{len(items)} items")
+        return voc_repo.latest_feedback_analysis(self.conn, product_id)
+
+    def feedback_analysis(self, product_id: str) -> dict[str, Any] | None:
+        from .storage import voc_repo
+
+        return voc_repo.latest_feedback_analysis(self.conn, product_id)
+
+    # -- radar (spec 27 / 28) ---------------------------------------------
+
+    def radar(self, analysis_id: str) -> dict[str, list[dict[str, Any]]]:
+        self.require(Permission.VIEW)
+        from .storage import voc_repo
+
+        return {
+            "opportunities": voc_repo.list_radar(self.conn, analysis_id, "opportunity"),
+            "threats": voc_repo.list_radar(self.conn, analysis_id, "threat"),
+        }
+
+    # -- scenarios (spec 20) ----------------------------------------------
+
+    def run_scenario(self, product_id: str, analysis_id: str, question: str):
+        """Model an open-ended what-if question."""
+        self.require(Permission.RUN_ANALYSIS)
+        question = (question or "").strip()
+        if not question:
+            raise ValueError("Describe the scenario you want to model.")
+        if len(question) > 2000:
+            raise ValueError("That scenario description is too long.")
+        if not self.config.is_configured:
+            raise ValueError("No OPENROUTER_API_KEY configured.")
+
+        from .agents.base import AnalysisContext
+        from .agents.voice import ScenarioAgent
+
+        product = self.get_product(product_id)
+        if product is None:
+            raise ValueError("Product not found.")
+
+        ctx = AnalysisContext(
+            conn=self.conn,
+            config=self.config,
+            provider=self._provider(),
+            workspace_id=self.workspace_id,
+            analysis_id=analysis_id,
+            product=dict(product),
+        )
+        result = ScenarioAgent(question).run(ctx)
+        if result is None:
+            raise ValueError("Scenario analysis did not complete.")
+        self._audit("scenario.run", target_type="product", target_id=product_id,
+                    detail=question[:200])
+        return result
+
+    def scenario_runs(self, product_id: str) -> list[dict[str, Any]]:
+        from .storage import voc_repo
+
+        return voc_repo.list_scenario_runs(self.conn, product_id)
+
+    def delete_scenario_run(self, scenario_id: str) -> None:
+        from .storage import voc_repo
+
+        voc_repo.delete_scenario_run(self.conn, scenario_id)
+
+    # -- comments (spec 32) ------------------------------------------------
+
+    def add_comment(self, product_id: str, target_type: str, target_id: str, body: str) -> str:
+        self.require(Permission.VIEW)
+        body = (body or "").strip()
+        if not body:
+            raise ValueError("Write something first.")
+        from .storage import voc_repo
+
+        return voc_repo.add_comment(
+            self.conn,
+            workspace_id=self.workspace_id,
+            product_id=product_id,
+            user_id=None if self.identity.is_dev else self.identity.user_id,
+            author_label=self.identity.label,
+            target_type=target_type,
+            target_id=target_id,
+            body=body,
+        )
+
+    def comments(self, target_type: str, target_id: str) -> list[dict[str, Any]]:
+        from .storage import voc_repo
+
+        return voc_repo.list_comments(self.conn, target_type, target_id)
+
+    def comment_counts(self, product_id: str) -> dict[str, int]:
+        from .storage import voc_repo
+
+        return voc_repo.comment_counts(self.conn, product_id)
+
+    def resolve_comment(self, comment_id: str) -> None:
+        self.require(Permission.VIEW)
+        from .storage import voc_repo
+
+        voc_repo.resolve_comment(self.conn, comment_id)
+
+    # -- competitor management (spec 7) -----------------------------------
+
+    def add_competitor(self, analysis_id: str, data: dict[str, Any]) -> str:
+        """Add a competitor the discovery agent missed."""
+        self.require(Permission.RUN_ANALYSIS)
+        name = (data.get("name") or "").strip()
+        if not name:
+            raise ValueError("A competitor needs a name.")
+
+        website = (data.get("website") or "").strip() or None
+        if website:
+            try:
+                website = validate_url(website).url
+            except UnsafeURLError as exc:
+                raise ValueError(f"That website cannot be used: {exc}") from exc
+
+        payload = {
+            **data,
+            "name": name[:120],
+            "website": website,
+            # User-supplied competitors are exactly that, and should never be
+            # presented with the same grade as a researched finding.
+            "grade": "user_supplied",
+            "confidence": 1.0,
+        }
+        competitor_id = repo.save_competitor(
+            self.conn,
+            workspace_id=self.workspace_id,
+            analysis_id=analysis_id,
+            data=payload,
+            is_user_added=True,
+            position=999,
+        )
+        self._audit("competitor.added", target_type="competitor",
+                    target_id=competitor_id, detail=name)
+        return competitor_id
+
+    def pin_competitor(self, competitor_id: str, pinned: bool) -> None:
+        self.require(Permission.RUN_ANALYSIS)
+        repo.set_competitor_pinned(self.conn, competitor_id, pinned)
+
+    def remove_competitor(self, competitor_id: str) -> None:
+        self.require(Permission.RUN_ANALYSIS)
+        repo.delete_competitor(self.conn, competitor_id)
+        self._audit("competitor.removed", target_type="competitor", target_id=competitor_id)
+
+    # -- scheduler (spec 33) ----------------------------------------------
+
+    def start_scheduler(self):
+        """Start the in-process monitor scheduler if it is enabled."""
+        if not self.config.scheduler_enabled or not self.config.is_configured:
+            return None
+
+        from .config import SCHEDULER_TICK_SECONDS
+        from .jobs.scheduler import start_scheduler
+
+        return start_scheduler(
+            self.due_monitors,
+            lambda monitor_id: self.run_monitor(monitor_id),
+            tick_seconds=SCHEDULER_TICK_SECONDS,
+        )
+
+    def scheduler_state(self):
+        from .jobs.scheduler import get_scheduler
+
+        scheduler = get_scheduler()
+        return scheduler.state if scheduler else None
+
+    def run_due_monitors(self) -> int:
+        """Run every monitor whose interval has elapsed. The cron entry point."""
+        self.require(Permission.MANAGE_MONITORS)
+        dispatched = 0
+        for monitor in self.due_monitors():
+            self.run_monitor(monitor["id"])
+            dispatched += 1
+        return dispatched
+
+    # -- account recovery --------------------------------------------------
+
+    def reset_member_password(self, user_id: str, new_password: str) -> None:
+        """Set another member's password (spec 41).
+
+        There is no email-based reset flow, so recovery is an owner or admin
+        setting a new password directly. Every existing session for that account
+        is revoked as a side effect.
+        """
+        self.require(Permission.MANAGE_MEMBERS)
+        self.auth.set_password(user_id, new_password)
+        self._audit("user.password_reset", target_type="user", target_id=user_id)
 
     # -- diagnostics (spec 51) --------------------------------------------
 

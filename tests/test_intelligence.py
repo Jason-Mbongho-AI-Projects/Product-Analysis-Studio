@@ -515,3 +515,94 @@ def test_strategy_report_renders_custom_tier_pricing(conn, analysis):
     assert "Custom" in report.markdown
     assert "Free" in report.markdown
     assert "$99" in report.markdown
+
+
+# ---------------------------------------------------------------------------
+# Monitor scheduler (spec 33)
+# ---------------------------------------------------------------------------
+
+
+def test_scheduler_dispatches_due_monitors():
+    from pas.jobs.scheduler import MonitorScheduler
+
+    dispatched = []
+    scheduler = MonitorScheduler(
+        due_provider=lambda: [{"id": "mon_1"}, {"id": "mon_2"}],
+        dispatch=dispatched.append,
+    )
+    assert scheduler.tick() == 2
+    assert dispatched == ["mon_1", "mon_2"]
+    assert scheduler.state.dispatched == 2
+
+
+def test_scheduler_caps_dispatches_per_tick():
+    """A backlog after a long shutdown must not stampede the provider."""
+    from pas.jobs.scheduler import MonitorScheduler
+
+    dispatched = []
+    scheduler = MonitorScheduler(
+        due_provider=lambda: [{"id": f"mon_{i}"} for i in range(50)],
+        dispatch=dispatched.append,
+        max_per_tick=3,
+    )
+    assert scheduler.tick() == 3
+    assert len(dispatched) == 3
+
+
+def test_scheduler_survives_a_failing_dispatch():
+    """One broken monitor must not stop the others or kill the scheduler."""
+    from pas.jobs.scheduler import MonitorScheduler
+
+    dispatched = []
+
+    def dispatch(monitor_id):
+        if monitor_id == "mon_bad":
+            raise RuntimeError("provider exploded")
+        dispatched.append(monitor_id)
+
+    scheduler = MonitorScheduler(
+        due_provider=lambda: [{"id": "mon_bad"}, {"id": "mon_good"}],
+        dispatch=dispatch,
+    )
+    assert scheduler.tick() == 1
+    assert dispatched == ["mon_good"]
+    assert scheduler.state.errors == 1
+    assert "provider exploded" in scheduler.state.last_error
+
+
+def test_scheduler_survives_a_failing_query():
+    from pas.jobs.scheduler import MonitorScheduler
+
+    def explode():
+        raise RuntimeError("database gone")
+
+    scheduler = MonitorScheduler(due_provider=explode, dispatch=lambda _: None)
+    assert scheduler.tick() == 0
+    assert scheduler.state.errors == 1
+
+
+def test_scheduler_does_nothing_when_nothing_is_due():
+    from pas.jobs.scheduler import MonitorScheduler
+
+    scheduler = MonitorScheduler(due_provider=list, dispatch=lambda _: None)
+    assert scheduler.tick() == 0
+    assert scheduler.state.errors == 0
+
+
+def test_scheduler_thread_starts_and_stops_cleanly():
+    from pas.jobs.scheduler import MonitorScheduler
+
+    scheduler = MonitorScheduler(
+        due_provider=list, dispatch=lambda _: None, tick_seconds=0.05
+    )
+    scheduler.start()
+    assert scheduler.state.running
+    scheduler.stop()
+    assert not scheduler.state.running
+
+
+def test_scheduler_is_off_by_default():
+    """Spending money on a timer must be a deliberate choice."""
+    from pas.config import AppConfig
+
+    assert AppConfig(api_key="k").scheduler_enabled is False

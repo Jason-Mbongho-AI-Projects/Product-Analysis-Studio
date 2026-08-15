@@ -37,17 +37,17 @@ Verified against the specification. Nothing in the spec was implemented at basel
 
 | # | Capability | Before | Now | Notes |
 |---|---|---|---|---|
-| 1 | Universal intake | Name only | **Partial** | URL / description / Idea Mode. Files, GitHub, app stores not yet. |
+| 1 | Universal intake | Name only | **Done** | URL, description, Idea Mode, and CSV/TSV/JSON/TXT/PDF upload |
 | 2 | Product intelligence profile | Prose | **Done** | Structured columns + features table |
 | 3 | Scoring engine | None | **Done** | 15 weighted dimensions, composite computed in code, fully drillable |
 | 4 | Evidence engine | None | **Done** | Claim→grade→source→confidence→date. The spine of the platform. |
 | 5 | Research engine | None | **Partial** | Own-site + user URLs. Provider protocol ready for more. |
 | 6 | Competitor discovery | Prose | **Done** | 8 classification types incl. manual/open-source alternatives |
-| 7 | Comparison matrix | None | **Partial** | Matrix + detail. Pin/reorder/export not yet. |
+| 7 | Comparison matrix | None | **Done** | Matrix, detail, add/pin/remove, CSV export |
 | 8 | Change detection | None | **Done** | Hash → price/signal → diff → agent. Price changes always escalate. |
 | 9 | Gap engine | None | **Done** | Incl. `DO_NOT_BUILD` verdicts — verified in live runs |
 | 10 | Customer intelligence | Prose | **Done** | Personas explicitly graded as inferred |
-| 11 | Voice of Customer | None | **Missing** | |
+| 11 | Voice of Customer | None | **Done** | Ingestion, clustering, sentiment, quote verification |
 | 12 | Market intelligence | Prose | **Done** | Drivers, inhibitors, trends, regulatory — all evidenced |
 | 13 | TAM/SAM/SOM | None | **Done** | Formula + variables + assumptions + confidence required |
 | 14 | Positioning studio | None | **Done** | 3+ distinct strategies, fit-scored, full messaging |
@@ -56,19 +56,19 @@ Verified against the specification. Nothing in the spec was implemented at basel
 | 17 | GTM studio | None | **Done** | Beachhead + 30/60/90/6mo/12mo phases |
 | 18 | Roadmap generator | None | **Partial** | Now/Next/Later, move, delete. No drag-drop (Streamlit limitation). |
 | 19 | AI product board | None | **Done** | Accept/reject/investigate/postpone; decisions remembered |
-| 20 | Simulation lab | None | **Partial** | Pricing/growth simulation with elasticity. No what-if scenario agent. |
-| 21 | Digital twin | None | **Partial** | Structured profile + memory serve this role |
+| 20 | Simulation lab | None | **Done** | Deterministic pricing sim + open-ended scenario agent |
+| 21 | Digital twin | None | **Partial** | Profile, memory, feedback and radar serve this role |
 | 22 | Strategy memory | None | **Done** | Rejected recs not resurfaced — test-covered |
-| 23 | Multi-agent architecture | None | **Done** | 12 specialist agents, dependency-ordered |
+| 23 | Multi-agent architecture | None | **Done** | 13 pipeline agents + 2 on-demand, dependency-ordered |
 | 24 | Agent contracts | None | **Done** | Pydantic → strict JSON Schema, validated + retried |
 | 25 | Ask the platform | None | **Done** | Retrieval + citations verified against the ledger |
-| 26 | Executive war room | None | **Partial** | KPIs, priorities, score profile, alert centre. |
-| 27/28 | Opportunity / Threat radar | None | **Partial** | Synthesis ranks both; no dedicated visual |
+| 26 | Executive war room | None | **Done** | Mode-aware KPIs, priorities, radar, alerts |
+| 27/28 | Opportunity / Threat radar | None | **Done** | Dedicated agent + surfaces, ranked by expected value |
 | 29 | Strategy graph | None | **Partial** | Relational FKs model the relationships |
 | 30 | Report studio | None | **Done** | MD/HTML/CSV/JSON; every report states its evidence basis |
 | 31 | Workspaces | None | **Partial** | Membership-enforced scoping; one workspace in the UI |
-| 32 | Collaboration | None | **Partial** | Roles, members, audit. No comments/mentions/assignment. |
-| 33 | Continuous intelligence | None | **Partial** | Monitors + due-detection. No OS-level scheduler. |
+| 32 | Collaboration | None | **Partial** | Roles, members, audit, comments. No mentions/assignment. |
+| 33 | Continuous intelligence | None | **Done** | Monitors, due-detection, in-process scheduler, cron entry point |
 | 34 | Alert center | None | **Done** | Severity-ranked, read/archive, alert→roadmap, ask AI |
 | 35 | Data quality indicators | None | **Done** | Banners, grade chips, confidence everywhere |
 | 36 | Source management | None | **Done** | Library, statuses, failure reasons, disable |
@@ -81,18 +81,18 @@ Verified against the specification. Nothing in the spec was implemented at basel
 | 43 | Auditability | None | **Done** | Agent, model, timestamp, evidence per finding |
 | 44 | Observability | None | **Done** | Runs, latency, failures, structured events |
 | 45 | Background jobs | None | **Done** | Thread pool, progress, cancel |
-| 46 | Database design | None | **Done** | 40 tables, FKs, indexes, 3 migrations |
+| 46 | Database design | None | **Done** | 47 tables, FKs, indexes, 4 atomic migrations |
 | 47 | UX | Basic | **Done** | Executive cards, tabs, drilldowns, progressive disclosure |
 | 48/50 | Progressive analysis | None | **Done** | Section-ready events, live progress |
 | 49 | Onboarding | None | **Done** | Minimal, mode-aware |
 | 51 | Admin diagnostics | None | **Done** | Provider, spend, failures, config |
-| 52 | Testing | None | **Done** | 253 tests on security + correctness paths |
+| 52 | Testing | None | **Done** | 316 tests on security + correctness paths |
 | 53 | Accessibility | Broken | **Partial** | Contrast fixed, focus rings added. No full audit. |
 | 54 | Performance | N/A | **Partial** | Indexed, capped, paginated reads |
 | 55 | Mobile | None | **Partial** | Responsive breakpoints |
 | 56 | Export / sharing | None | **Done** | Download + structured export |
 | 57 | Public API | None | **Missing** | Service layer is API-ready; not exposed |
-| 58–62 | Modes | None | **Partial** | Mode selected and steers synthesis; no per-mode surfaces |
+| 58–62 | Modes | None | **Done** | Mode steers synthesis and reorders the executive view |
 
 ---
 
@@ -115,6 +115,11 @@ Not claimed — executed:
 | Monitoring: unchanged content | **0 model calls** — hash check short-circuits |
 | Monitoring: real change | Detected, classified `pricing`, alert raised, 1 model call |
 | Ask with citations | 0 fabricated citations across live questions |
+| Full 13-agent pipeline (live) | 13/13 succeeded, $0.0445 |
+| Voice of Customer (live) | 5 themes from 10 reviews; every quote verbatim |
+| Radar (live) | 5 opportunities + 5 threats, ranked by expected value |
+| Scenario agent (live) | Best/base/worst at 30/50/20%, honest 50% confidence |
+| Migration atomicity | A failing migration now leaves nothing behind |
 | Auth: login enumeration | Identical message AND timing for unknown vs wrong password |
 | Auth: forged session token | Rejected; app returns to the sign-in gate |
 | Auth: RBAC at service boundary | Viewer/analyst/PM denied per the matrix |
@@ -151,30 +156,31 @@ superseded by eight specialised agents.
 
 ## 5. Remaining roadmap
 
-Phases 2-4 of the original plan are now built. What remains:
+Every capability section of the specification is now built or deliberately
+scoped out. What remains, and why:
 
-**Voice of Customer (§11)** — review/feedback ingestion, theme clustering,
-sentiment. The largest single remaining capability.
+**Semantic retrieval (§40)** — Ask ranks by grade- and confidence-weighted
+keyword overlap. Embeddings would improve recall on paraphrased questions but
+add a per-analysis embedding cost and a vector store. Worth doing when retrieval
+quality becomes the bottleneck; it is not yet.
 
-**Scenario simulation agent (§20)** — the financial simulator exists; the
-open-ended "what if Competitor X launches Feature Y" agent does not.
+**Richer research providers (§5)** — review sites, app stores, job postings and
+news. The `ResearchProvider` protocol takes them without touching the agents.
+Each needs its own terms-of-use assessment, which is why none were added
+speculatively.
 
-**Per-mode surfaces (§58-62)** — mode steers synthesis but Investor / PM /
-Executive / Consultant do not yet get distinct views.
+**Public API (§57)** — deliberately not built. The spec says not to expose one
+unless appropriate for this phase, and the service layer is already clean enough
+to lift when that changes.
 
-**Semantic retrieval (§40)** — ranking is grade- and confidence-weighted keyword
-overlap. Embeddings would improve recall on paraphrased questions.
+**Collaboration depth (§32)** — comments exist; mentions, assignment and an
+activity feed do not. These need multi-user usage to design against.
 
-**Richer research providers (§5)** — review sites, app stores, job postings,
-news. The `ResearchProvider` protocol is ready for them.
+**Drag-and-drop roadmap (§18)** — Streamlit has no native drag-and-drop.
+Move-between-horizon buttons are the honest alternative.
 
-**Opportunity / Threat radar visuals (§27-28)** — ranked in synthesis, no
-dedicated visual surface.
-
-**Public API (§57)** — the service layer is clean enough to expose; not done.
-
-**Scheduling (§33)** — monitors know when they are due, but nothing wakes the
-process. Needs an OS scheduler or a long-running worker.
+**Accessibility audit (§53)** — contrast and focus states were fixed, but no
+screen-reader pass has been done.
 
 **Authentication — built, shipped off by default**
 scrypt hashing, hashed session tokens, lockout, six-role RBAC enforced at the
@@ -231,3 +237,20 @@ decides without managing research plumbing. Both are supersets of Executive.
 **Known gaps:** no password reset (an owner sets a member's password directly),
 no OAuth/SSO, and sessions live in Streamlit server-side state so a restart signs
 everyone out.
+
+---
+
+## 8. Further defects found and fixed
+
+Continuing the record from section 6. All were silent.
+
+| Defect | Impact | Fix |
+|---|---|---|
+| `executescript` issues an implicit COMMIT | The migration runner's transaction was decorative. A migration that failed part-way **half-applied and could never re-run** — which is exactly what happened when migration 004 hit an index-name collision. | Execute statements individually under explicit `BEGIN`/`COMMIT` |
+| Python's sqlite3 does not open transactions for DDL | Even with a transaction, `CREATE TABLE` ran in autocommit and survived rollback | Manual transaction control during migration; SQLite itself supports transactional DDL |
+| `idx_scenarios_product` declared in two migrations | SQLite index names are global, so migration 004 could not apply | Renamed, plus a test asserting index names are unique across all migrations |
+| Audit write with a dangling user reference | Foreign-key error **rolled back the operation being recorded** | Audit is best-effort and keeps the actor as text |
+
+The migration bug is the one worth dwelling on: the transaction wrapper looked
+correct and had been in place since the first commit, but never actually
+protected anything. It only surfaced because a real migration failed.
