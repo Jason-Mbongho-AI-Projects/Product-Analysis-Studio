@@ -170,6 +170,9 @@ streamlit run app.py
 | Variable | Default | Purpose |
 |---|---|---|
 | `OPENROUTER_API_KEY` | *(required)* | API key. Server-side only, never sent to the browser. |
+| `PAS_AUTH_ENABLED` | `false` | **Authentication. Off by default for local development.** |
+| `PAS_ALLOW_SIGNUP` | `true` | Whether strangers may create their own accounts. |
+| `PAS_DEFAULT_ROLE` | `viewer` | Role for accounts after the first (which becomes owner). |
 | `PAS_FAST_MODEL` | `openai/gpt-4.1-mini` | Model for mechanical tasks |
 | `PAS_DEEP_MODEL` | `openai/gpt-4.1-mini` | Model for reasoning-heavy agents |
 | `PAS_DATA_DIR` | `./data` | SQLite location |
@@ -211,8 +214,58 @@ Coverage focuses on the paths where failure is expensive:
 | **TLS** | Verification is always on; the OS trust store is used via `truststore` so corporate roots resolve. |
 | **Resource limits** | Responses are size-capped and streamed; redirects bounded; per-analysis model-call ceiling. |
 | **Site terms** | robots.txt is honoured. Sites that decline access are recorded as blocked and skipped — never worked around. |
-| **Tenant isolation** | Every table carries `workspace_id`; every read is scoped. |
+| **Authentication** | scrypt password hashing (n=2^15), session tokens stored only as hashes, temporary lockout after 5 failed attempts, and identical response and timing for unknown-account vs wrong-password so login is not a user-enumeration oracle. |
+| **Authorisation** | Six roles over a declarative permission matrix, enforced at the service boundary — not in the UI, which only hides what it already cannot reach. |
+| **Tenant isolation** | Every table carries `workspace_id`; every read is scoped. A valid session grants nothing in a workspace the user is not a member of. |
+| **Audit** | Every state change records actor, action, target and time. Audit writes are best-effort and can never roll back the operation they describe. |
 | **Deletion** | Deleting a product cascades to all derived intelligence via foreign keys. |
+
+---
+
+## Authentication
+
+**Authentication is off by default** so `streamlit run app.py` works immediately
+with no setup. While it is off, the app runs as a "development user" holding
+owner rights and shows a permanent banner saying so.
+
+To turn it on:
+
+```bash
+# .env
+PAS_AUTH_ENABLED=true
+```
+
+Restart, and the first account you create becomes the **workspace owner**.
+Subsequent accounts get `PAS_DEFAULT_ROLE` (default `viewer`).
+
+### Roles
+
+| Role | Can |
+|---|---|
+| **Owner** | Everything, including workspace deletion |
+| **Admin** | Manage members, delete products, view diagnostics |
+| **Analyst** | Run analyses, manage research sources and monitors |
+| **Product manager** | Decide on recommendations, own the roadmap |
+| **Executive** | Read everything, ask questions, export |
+| **Viewer** | Read only |
+
+Analyst and Product Manager are deliberately *not* nested: an analyst gathers
+evidence but does not decide the roadmap, and a product manager decides without
+managing research plumbing.
+
+### Why the permission checks run even when auth is off
+
+The development identity holds every permission rather than bypassing the
+checks. `service.require(Permission.X)` executes on every call in both modes, so
+switching authentication on does not activate a pile of code that has never run.
+The test suite exercises the matrix with real per-role identities.
+
+### Safety rail
+
+An open app is one missing environment variable away from an unauthenticated
+deployment, so `network_exposure_warning()` escalates from a quiet caption to a
+prominent error when authentication is off **and** the server is bound to
+anything other than loopback.
 
 ---
 
@@ -246,8 +299,11 @@ Honest scope statement — see `AUDIT.md` for the full roadmap:
   supports them.
 - Positioning, pricing simulation, GTM and Voice-of-Customer are not yet implemented.
 - Report export (PDF/DOCX/XLSX) is not yet implemented.
-- Single-user. Workspace scoping exists throughout, but there is no auth layer —
-  do not expose this to untrusted networks as-is.
+- **Authentication ships disabled** (`PAS_AUTH_ENABLED=false`) so local
+  development is unobstructed. Turn it on before anyone else can reach the app.
+- Sessions live in Streamlit's server-side state, so a server restart signs
+  everyone out.
+- No password reset flow. An owner or admin sets a member's password directly.
 
 ---
 

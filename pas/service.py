@@ -25,21 +25,65 @@ from .research.safety import UnsafeURLError, validate_url
 from .storage import repositories as repo
 from .storage.db import get_connection, migrate
 
+from .auth.models import Permission
+
 if TYPE_CHECKING:  # imported lazily at runtime to keep UI startup fast
     from .analysis.ask import Answer
     from .analysis.finance import Economics
     from .analysis.reports import Report
+    from .auth.models import Identity
 
 
 class StudioService:
     """Facade over storage, research and the agent pipeline."""
 
-    def __init__(self, config: AppConfig | None = None) -> None:
+    def __init__(
+        self,
+        config: AppConfig | None = None,
+        identity: "Identity | None" = None,
+    ) -> None:
         self.config = config or load_config()
         self.conn = get_connection()
         migrate(self.conn)
         self.workspace_id = repo.ensure_default_workspace(self.conn)
         self._llm = None
+
+        from .auth.models import Role
+        from .auth.service import AuthService
+
+        try:
+            default_role = Role(self.config.default_role)
+        except ValueError:
+            default_role = Role.VIEWER
+        self.auth = AuthService(self.conn, default_role=default_role)
+
+        # When authentication is disabled the identity is the development user,
+        # which holds every permission. The authorisation code path still runs,
+        # so enabling auth later does not switch on untested code.
+        self.identity = identity or self.auth.open_identity(self.workspace_id)
+        self.workspace_id = self.identity.workspace_id
+
+    # -- authorisation -----------------------------------------------------
+
+    def require(self, permission: "Permission") -> None:
+        """Assert the current identity may perform an action."""
+        self.identity.require(permission)
+
+    def can(self, permission: "Permission") -> bool:
+        return self.identity.can(permission)
+
+    def _audit(
+        self, action: str, *, target_type: str = "", target_id: str | None = None,
+        detail: str = "",
+    ) -> None:
+        self.auth.audit(
+            workspace_id=self.workspace_id,
+            identity=self.identity,
+            action=action,
+            target_type=target_type,
+            target_id=target_id,
+            detail=detail,
+        )
 
     def _provider(self):
         """Lazily construct the model provider for foreground work.
@@ -67,6 +111,7 @@ class StudioService:
         A supplied URL is validated here, at the boundary, so an unsafe URL is
         rejected before it is ever persisted or fetched.
         """
+        self.require(Permission.CREATE_PRODUCT)
         name = (name or "").strip()
         intake_input = (intake_input or "").strip()
         if not intake_input:
@@ -82,7 +127,7 @@ class StudioService:
         if not name:
             name = source_url or intake_input[:60]
 
-        return repo.create_product(
+        product_id = repo.create_product(
             self.conn,
             workspace_id=self.workspace_id,
             name=name[:120],
@@ -90,15 +135,23 @@ class StudioService:
             intake_input=intake_input[:8000],
             source_url=source_url,
         )
+        self._audit("product.created", target_type="product", target_id=product_id,
+                    detail=name[:120])
+        return product_id
 
     def list_products(self) -> list[dict[str, Any]]:
+        self.require(Permission.VIEW)
         return repo.list_products(self.conn, self.workspace_id)
 
     def get_product(self, product_id: str) -> dict[str, Any] | None:
         return repo.get_product(self.conn, product_id, self.workspace_id)
 
     def delete_product(self, product_id: str) -> None:
+        self.require(Permission.DELETE_PRODUCT)
+        product = self.get_product(product_id)
         repo.delete_product(self.conn, product_id, self.workspace_id)
+        self._audit("product.deleted", target_type="product", target_id=product_id,
+                    detail=(product or {}).get("name", ""))
 
     # -- analyses ----------------------------------------------------------
 
@@ -111,6 +164,7 @@ class StudioService:
         extra_urls: list[str] | None = None,
     ) -> tuple[str, JobState]:
         """Create an analysis version and run it on a background worker."""
+        self.require(Permission.RUN_ANALYSIS)
         if not self.config.is_configured:
             raise ValueError(
                 "No OPENROUTER_API_KEY configured. Add it to .env and restart."
@@ -152,6 +206,8 @@ class StudioService:
             return orchestrator.run(request, on_progress=emit, cancel_event=cancel_event)
 
         job = get_runner().submit(analysis_id, analysis_id, work)
+        self._audit("analysis.started", target_type="analysis", target_id=analysis_id,
+                    detail=f"mode={mode} research={research_enabled}")
         return analysis_id, job
 
     def get_analysis(self, analysis_id: str) -> dict[str, Any] | None:
@@ -167,12 +223,15 @@ class StudioService:
         return get_runner().get(analysis_id)
 
     def cancel_analysis(self, analysis_id: str) -> bool:
+        self.require(Permission.RUN_ANALYSIS)
+        self._audit("analysis.cancelled", target_type="analysis", target_id=analysis_id)
         return get_runner().cancel(analysis_id)
 
     # -- intelligence reads ------------------------------------------------
 
     def dashboard(self, analysis_id: str) -> dict[str, Any]:
         """Everything the executive view needs, in one call."""
+        self.require(Permission.VIEW)
         conn = self.conn
         scores = repo.get_scores(conn, analysis_id)
         return {
@@ -201,19 +260,25 @@ class StudioService:
         return repo.list_sources(self.conn, analysis_id)
 
     def disable_source(self, source_id: str) -> None:
+        self.require(Permission.MANAGE_SOURCES)
         repo.set_source_status(self.conn, source_id, "disabled")
+        self._audit("source.disabled", target_type="source", target_id=source_id)
 
     # -- decisions and roadmap --------------------------------------------
 
     def decide(self, recommendation_id: str, state: str, note: str = "") -> None:
+        self.require(Permission.DECIDE)
         if state not in {member.value for member in DecisionState}:
             raise ValueError(f"Unknown decision state: {state}")
         repo.decide_recommendation(self.conn, recommendation_id, state=state, note=note)
+        self._audit(f"recommendation.{state}", target_type="recommendation",
+                    target_id=recommendation_id, detail=note)
 
     def accept_to_roadmap(
         self, recommendation_id: str, horizon: str = RoadmapHorizon.NEXT.value
     ) -> str:
         """Accept a recommendation and materialise it as a roadmap item (spec 19)."""
+        self.require(Permission.DECIDE)
         rec = repo.decide_recommendation(
             self.conn, recommendation_id, state=DecisionState.ACCEPTED.value
         )
@@ -240,14 +305,17 @@ class StudioService:
         return grouped
 
     def move_roadmap_item(self, item_id: str, horizon: str) -> None:
+        self.require(Permission.MANAGE_ROADMAP)
         repo.move_roadmap_item(self.conn, item_id, horizon)
 
     def delete_roadmap_item(self, item_id: str) -> None:
+        self.require(Permission.MANAGE_ROADMAP)
         repo.delete_roadmap_item(self.conn, item_id)
 
     def add_roadmap_item(
         self, product_id: str, title: str, detail: str = "", horizon: str = "next"
     ) -> str:
+        self.require(Permission.MANAGE_ROADMAP)
         if not title.strip():
             raise ValueError("A roadmap item needs a title.")
         return repo.add_roadmap_item(
@@ -365,6 +433,7 @@ class StudioService:
 
     def ask(self, product_id: str, analysis_id: str, question: str) -> "Answer":
         """Answer a question from stored intelligence, with verified citations."""
+        self.require(Permission.ASK)
         question = (question or "").strip()
         if not question:
             raise ValueError("Ask a question first.")
@@ -411,6 +480,7 @@ class StudioService:
     def create_monitor(
         self, product_id: str, label: str, urls: list[str], interval_hours: int = 168
     ) -> str:
+        self.require(Permission.MANAGE_MONITORS)
         safe_urls: list[str] = []
         for url in urls:
             if not url.strip():
@@ -435,13 +505,16 @@ class StudioService:
         return repo.list_monitors(self.conn, product_id)
 
     def set_monitor_enabled(self, monitor_id: str, enabled: bool) -> None:
+        self.require(Permission.MANAGE_MONITORS)
         repo.set_monitor_enabled(self.conn, monitor_id, enabled)
 
     def delete_monitor(self, monitor_id: str) -> None:
+        self.require(Permission.MANAGE_MONITORS)
         repo.delete_monitor(self.conn, monitor_id)
 
     def run_monitor(self, monitor_id: str) -> tuple[str, JobState]:
         """Run a monitor in the background; results land in the alert centre."""
+        self.require(Permission.MANAGE_MONITORS)
         if not self.config.is_configured:
             raise ValueError("No OPENROUTER_API_KEY configured.")
         monitor = repo.get_monitor(self.conn, monitor_id)
@@ -491,12 +564,14 @@ class StudioService:
         return repo.unread_alert_count(self.conn, product_id)
 
     def set_alert_status(self, alert_id: str, status: str) -> None:
+        self.require(Permission.MANAGE_ALERTS)
         if status not in {member.value for member in AlertStatus}:
             raise ValueError(f"Unknown alert status: {status}")
         repo.set_alert_status(self.conn, alert_id, status)
 
     def alert_to_roadmap(self, alert_id: str, horizon: str = "next") -> str:
         """Turn an alert into a tracked roadmap item (spec 34)."""
+        self.require(Permission.MANAGE_ROADMAP)
         alert = repo.get_alert(self.conn, alert_id)
         if alert is None:
             raise ValueError("Alert not found.")
@@ -517,6 +592,7 @@ class StudioService:
     # -- reports (spec 30 / 56) -------------------------------------------
 
     def build_report(self, report_id: str, analysis_id: str) -> "Report":
+        self.require(Permission.EXPORT)
         from .analysis import reports
 
         entry = reports.REPORTS.get(report_id)
@@ -530,6 +606,7 @@ class StudioService:
         return entry[1](data, product)
 
     def build_evidence_report(self, analysis_id: str) -> "Report":
+        self.require(Permission.EXPORT)
         from .analysis import reports
 
         data = self.dashboard(analysis_id)
@@ -539,6 +616,8 @@ class StudioService:
         return reports.evidence_report(data, product, self.evidence(analysis_id, limit=1000))
 
     def export_json(self, analysis_id: str) -> str:
+        self.require(Permission.EXPORT)
+        self._audit("analysis.exported", target_type="analysis", target_id=analysis_id)
         from .analysis import reports
 
         data = self.dashboard(analysis_id)
@@ -550,6 +629,7 @@ class StudioService:
     # -- diagnostics (spec 51) --------------------------------------------
 
     def diagnostics(self) -> dict[str, Any]:
+        self.require(Permission.VIEW_DIAGNOSTICS)
         conn = self.conn
         usage = repo.usage_summary(conn, self.workspace_id)
         failed_runs = conn.execute(

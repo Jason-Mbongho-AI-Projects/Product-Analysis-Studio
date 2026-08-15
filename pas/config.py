@@ -40,6 +40,23 @@ RESEARCH_MAX_PAGES_PER_DOMAIN = int(os.getenv("PAS_MAX_PAGES_PER_DOMAIN", "6"))
 MAX_LLM_CALLS_PER_ANALYSIS = int(os.getenv("PAS_MAX_LLM_CALLS", "60"))
 
 
+# Authentication (spec 41).
+#
+# Defaults to OFF so local development is unobstructed. This is a deliberate
+# convenience, not an oversight - but it means an unauthenticated deployment is
+# one missing env var away, so the UI shows a permanent banner while it is off
+# and `network_exposure_warning()` escalates when the server is also reachable
+# from outside this machine.
+AUTH_ENABLED = os.getenv("PAS_AUTH_ENABLED", "").lower() in {"1", "true", "yes", "on"}
+
+# Role granted to accounts after the first. The first account always becomes
+# the workspace owner.
+DEFAULT_MEMBER_ROLE = os.getenv("PAS_DEFAULT_ROLE", "viewer")
+
+# When auth is enabled, whether strangers may create their own accounts.
+ALLOW_SELF_SIGNUP = os.getenv("PAS_ALLOW_SIGNUP", "true").lower() in {"1", "true", "yes", "on"}
+
+
 class ConfigError(RuntimeError):
     """Raised when required configuration is absent or malformed."""
 
@@ -51,6 +68,9 @@ class AppConfig:
     deep_model: str = DEEP_MODEL
     db_path: Path = DB_PATH
     offline: bool = False
+    auth_enabled: bool = AUTH_ENABLED
+    allow_signup: bool = ALLOW_SELF_SIGNUP
+    default_role: str = DEFAULT_MEMBER_ROLE
     allowed_schemes: tuple[str, ...] = field(default=("http", "https"))
 
     @property
@@ -71,6 +91,45 @@ def load_config() -> AppConfig:
     return AppConfig(
         api_key=os.getenv("OPENROUTER_API_KEY") or None,
         offline=os.getenv("PAS_OFFLINE", "").lower() in {"1", "true", "yes"},
+        auth_enabled=AUTH_ENABLED,
+        allow_signup=ALLOW_SELF_SIGNUP,
+        default_role=DEFAULT_MEMBER_ROLE,
+    )
+
+
+def server_address() -> str:
+    """The address Streamlit is bound to, if it can be determined."""
+    address = os.getenv("STREAMLIT_SERVER_ADDRESS", "")
+    if address:
+        return address
+    try:
+        from streamlit import config as st_config
+
+        return st_config.get_option("server.address") or ""
+    except Exception:
+        return ""
+
+
+def network_exposure_warning(auth_enabled: bool) -> str | None:
+    """Return a warning when an unauthenticated app is reachable off-machine.
+
+    Running open on localhost while developing is reasonable. Running open on
+    ``0.0.0.0`` means anyone who can route to the host has full access to every
+    analysis and the configured API key's spend.
+    """
+    if auth_enabled:
+        return None
+
+    address = server_address().strip()
+    loopback = {"", "localhost", "127.0.0.1", "::1"}
+    if address.lower() in loopback:
+        return None
+
+    return (
+        f"Authentication is disabled and the server is bound to '{address}', "
+        "which is reachable beyond this machine. Anyone who can reach it has "
+        "full access to your analyses and can spend against your API key. "
+        "Set PAS_AUTH_ENABLED=true, or bind to localhost."
     )
 
 

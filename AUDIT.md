@@ -66,8 +66,8 @@ Verified against the specification. Nothing in the spec was implemented at basel
 | 27/28 | Opportunity / Threat radar | None | **Partial** | Synthesis ranks both; no dedicated visual |
 | 29 | Strategy graph | None | **Partial** | Relational FKs model the relationships |
 | 30 | Report studio | None | **Done** | MD/HTML/CSV/JSON; every report states its evidence basis |
-| 31 | Workspaces | None | **Partial** | Schema + scoping throughout; single default workspace |
-| 32 | Collaboration | None | **Missing** | Correctly deferred — product is single-user |
+| 31 | Workspaces | None | **Partial** | Membership-enforced scoping; one workspace in the UI |
+| 32 | Collaboration | None | **Partial** | Roles, members, audit. No comments/mentions/assignment. |
 | 33 | Continuous intelligence | None | **Partial** | Monitors + due-detection. No OS-level scheduler. |
 | 34 | Alert center | None | **Done** | Severity-ranked, read/archive, alert→roadmap, ask AI |
 | 35 | Data quality indicators | None | **Done** | Banners, grade chips, confidence everywhere |
@@ -76,17 +76,17 @@ Verified against the specification. Nothing in the spec was implemented at basel
 | 38 | AI cost control | None | **Done** | Measured cost, dedup, call ceiling, model routing |
 | 39 | Provider abstraction | None | **Done** | `LLMProvider` ABC |
 | 40 | Retrieval | None | **Partial** | Grade/confidence-weighted keyword ranking. No embeddings. |
-| 41 | Security | None | **Done** | SSRF, XSS, TLS, limits, isolation — test-covered |
+| 41 | Security | None | **Done** | Auth, RBAC, SSRF, XSS, TLS, isolation — test-covered |
 | 42 | Privacy | None | **Done** | Cascade deletion, workspace scoping |
 | 43 | Auditability | None | **Done** | Agent, model, timestamp, evidence per finding |
 | 44 | Observability | None | **Done** | Runs, latency, failures, structured events |
 | 45 | Background jobs | None | **Done** | Thread pool, progress, cancel |
-| 46 | Database design | None | **Done** | 36 tables, FKs, indexes, 2 migrations |
+| 46 | Database design | None | **Done** | 40 tables, FKs, indexes, 3 migrations |
 | 47 | UX | Basic | **Done** | Executive cards, tabs, drilldowns, progressive disclosure |
 | 48/50 | Progressive analysis | None | **Done** | Section-ready events, live progress |
 | 49 | Onboarding | None | **Done** | Minimal, mode-aware |
 | 51 | Admin diagnostics | None | **Done** | Provider, spend, failures, config |
-| 52 | Testing | None | **Done** | 181 tests on security + correctness paths |
+| 52 | Testing | None | **Done** | 253 tests on security + correctness paths |
 | 53 | Accessibility | Broken | **Partial** | Contrast fixed, focus rings added. No full audit. |
 | 54 | Performance | N/A | **Partial** | Indexed, capped, paginated reads |
 | 55 | Mobile | None | **Partial** | Responsive breakpoints |
@@ -115,6 +115,11 @@ Not claimed — executed:
 | Monitoring: unchanged content | **0 model calls** — hash check short-circuits |
 | Monitoring: real change | Detected, classified `pricing`, alert raised, 1 model call |
 | Ask with citations | 0 fabricated citations across live questions |
+| Auth: login enumeration | Identical message AND timing for unknown vs wrong password |
+| Auth: forged session token | Rejected; app returns to the sign-in gate |
+| Auth: RBAC at service boundary | Viewer/analyst/PM denied per the matrix |
+| Open mode | No login required; dev identity holds all permissions |
+| Both modes boot | HTTP 200 with auth on and off |
 
 The evidence contrast between those two runs is the central proof: the platform
 does not manufacture verified facts when it has nothing to verify against.
@@ -171,9 +176,13 @@ dedicated visual surface.
 **Scheduling (§33)** — monitors know when they are due, but nothing wakes the
 process. Needs an OS scheduler or a long-running worker.
 
-**Cross-cutting, required before any multi-user deployment**
-Authentication and RBAC. The app has **no auth layer** and must not be exposed
-to untrusted networks. Collaboration (§32) depends on this landing first.
+**Authentication — built, shipped off by default**
+scrypt hashing, hashed session tokens, lockout, six-role RBAC enforced at the
+service boundary, workspace membership, and an audit log. `PAS_AUTH_ENABLED`
+defaults to `false` so development is unobstructed; the UI shows a permanent
+banner while it is off and escalates to an error when the server is also bound
+off-loopback. Remaining auth gaps: no password-reset flow, no OAuth/SSO, and
+sessions do not survive a server restart.
 
 ---
 
@@ -192,3 +201,33 @@ system looked like it was working.
 | `-1` price sentinel rendered literally | Contact-sales tiers displayed as **"$-1/mo"** | `format_price` renders Custom / Free; applied across UI, reports and prompts |
 | Date regex missed `12 March 2024` | Date-only edits registered as content change | Handle both date orderings |
 | Price regex captured trailing comma | `"$49,"` ≠ `"$49"`, causing phantom price changes | Explicit thousands-group matching |
+
+---
+
+## 7. Authentication design notes
+
+**Off by default, on purpose.** `PAS_AUTH_ENABLED` defaults to `false` so
+`streamlit run app.py` works with no setup. That is a deliberate convenience
+with a known risk, mitigated three ways: a permanent UI banner, an escalation to
+a prominent error when the server is bound off-loopback, and documentation at
+the point of configuration.
+
+**The authorisation path always executes.** In open mode the identity is a
+development user holding every permission — the code still calls
+`identity.require(permission)` on every guarded operation. Bypassing the checks
+entirely would mean that switching auth on activates a large body of code that
+has never run once. The tests drive the service with real per-role identities so
+the matrix is verified independently of the mode.
+
+**Membership is the isolation boundary.** A valid session alone grants nothing;
+`identity_from_token(token, workspace_id)` returns `None` unless a
+`workspace_members` row exists. This is the mechanism that turns the pre-existing
+`workspace_id` column scoping into genuine multi-tenancy.
+
+**Roles are not strictly nested.** Analyst and Product Manager are siblings:
+an analyst gathers evidence but does not decide the roadmap; a product manager
+decides without managing research plumbing. Both are supersets of Executive.
+
+**Known gaps:** no password reset (an owner sets a member's password directly),
+no OAuth/SSO, and sessions live in Streamlit server-side state so a restart signs
+everyone out.

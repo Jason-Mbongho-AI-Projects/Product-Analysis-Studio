@@ -10,28 +10,51 @@ from __future__ import annotations
 
 import streamlit as st
 
+from ..auth.models import Identity, Permission, PermissionDenied
+from ..config import load_config, network_exposure_warning
 from ..service import StudioService
 from . import theme
 from .components import esc, kpi
-from .pages import alerts, ask, intake, reports, strategy, workroom
+from .pages import alerts, ask, auth_pages, intake, reports, strategy, workroom
 
-#: route -> (label, icon, requires a selected product)
-ROUTES: dict[str, tuple[str, str, bool]] = {
-    "intake": ("Products", ":material/inventory_2:", False),
-    "workroom": ("Analysis", ":material/analytics:", True),
-    "strategy": ("Strategy", ":material/target:", True),
-    "decide": ("Decide", ":material/checklist:", True),
-    "ask": ("Ask", ":material/forum:", True),
-    "alerts": ("Alerts", ":material/notifications:", True),
-    "reports": ("Reports", ":material/description:", True),
-    "diagnostics": ("Diagnostics", ":material/monitoring:", False),
+#: route -> (label, requires a product, permission needed to see it)
+ROUTES: dict[str, tuple[str, bool, Permission]] = {
+    "intake": ("Products", False, Permission.VIEW),
+    "workroom": ("Analysis", True, Permission.VIEW),
+    "strategy": ("Strategy", True, Permission.VIEW),
+    "decide": ("Decide", True, Permission.VIEW),
+    "ask": ("Ask", True, Permission.ASK),
+    "alerts": ("Alerts", True, Permission.VIEW),
+    "reports": ("Reports", True, Permission.EXPORT),
+    "account": ("Account", False, Permission.VIEW),
+    "diagnostics": ("Diagnostics", False, Permission.VIEW_DIAGNOSTICS),
 }
 
 
 @st.cache_resource(show_spinner=False)
-def _service() -> StudioService:
-    """One service per process. Cached so migrations run once, not per rerun."""
+def _base_service() -> StudioService:
+    """Process-wide service used before an identity is resolved.
+
+    Cached so migrations run once rather than on every Streamlit rerun.
+    """
     return StudioService()
+
+
+def _resolve_identity(base: StudioService) -> Identity | None:
+    """Determine who is acting, or None when a sign-in is required."""
+    config = base.config
+    if not config.auth_enabled:
+        return base.auth.open_identity(base.workspace_id)
+
+    token = st.session_state.get(auth_pages.SESSION_TOKEN_KEY, "")
+    if not token:
+        return None
+    identity = base.auth.identity_from_token(token, base.workspace_id)
+    if identity is None:
+        # Expired, revoked, or the account lost access to this workspace.
+        st.session_state.pop(auth_pages.SESSION_TOKEN_KEY, None)
+        return None
+    return identity
 
 
 def _active_jobs():
@@ -41,18 +64,24 @@ def _active_jobs():
 
 
 def _sidebar(service: StudioService, product: dict | None) -> str:
+    identity = service.identity
+
     with st.sidebar:
         st.markdown("### Product Analysis Studio")
         st.caption("AI product intelligence & strategy OS")
 
+        # Only offer routes this identity may actually use.
         options = [
             key
-            for key, (_label, _icon, needs_product) in ROUTES.items()
-            if product is not None or not needs_product
+            for key, (_label, needs_product, permission) in ROUTES.items()
+            if (product is not None or not needs_product) and identity.can(permission)
         ]
+        if not options:
+            options = ["account"]
+
         current = st.session_state.get("route", "intake")
         if current not in options:
-            current = "intake"
+            current = options[0]
 
         unread = service.unread_alerts(product["id"]) if product else 0
 
@@ -81,6 +110,16 @@ def _sidebar(service: StudioService, product: dict | None) -> str:
                     st.caption(f"v{analysis['version']} · {analysis['status']}")
         else:
             st.caption("No product selected.")
+
+        st.markdown("---")
+        st.caption(f"{esc(identity.label)} · {identity.role.label}")
+        if identity.is_dev:
+            st.warning("Auth disabled (dev)", icon=":material/lock_open:")
+        elif st.button("Sign out", use_container_width=True):
+            token = st.session_state.pop(auth_pages.SESSION_TOKEN_KEY, "")
+            if token:
+                service.auth.revoke_session(token)
+            st.rerun()
 
         if not service.config.is_configured:
             st.warning("No API key configured", icon=":material/key_off:")
@@ -167,27 +206,49 @@ def main() -> None:
     st.session_state.setdefault("active_analysis", None)
 
     try:
-        service = _service()
+        base = _base_service()
     except Exception as exc:  # database or migration failure
         st.error(f"Could not start: {exc}", icon=":material/error:")
         st.stop()
         return
 
+    identity = _resolve_identity(base)
+    if identity is None:
+        auth_pages.render_login(base)
+        return
+
+    # A per-run service bound to the resolved identity, so every permission
+    # check below reflects the actual signed-in user.
+    service = StudioService(config=base.config, identity=identity)
+
+    _security_banner(service)
+
     product_id = st.session_state.get("active_product")
     product = service.get_product(product_id) if product_id else None
     if product is None and product_id:
-        # The product was deleted in another tab or session.
+        # The product was deleted, or belongs to a workspace this user left.
         st.session_state["active_product"] = None
         st.session_state["active_analysis"] = None
 
     route = _sidebar(service, product)
     st.session_state["route"] = route
 
-    if route == "intake":
-        intake.render(service)
-        return
+    try:
+        _dispatch(service, route, product)
+    except PermissionDenied as exc:
+        # Belt and braces: the sidebar already hides routes the user cannot
+        # reach, but a stale session_state route must not leak data.
+        st.error(str(exc), icon=":material/block:")
 
-    if product is None:
+
+def _dispatch(service: StudioService, route: str, product: dict | None) -> None:
+    if route == "account":
+        auth_pages.render_account(service)
+        return
+    if route == "diagnostics":
+        _diagnostics(service)
+        return
+    if route == "intake" or product is None:
         intake.render(service)
         return
 
@@ -206,7 +267,24 @@ def main() -> None:
     elif route == "reports":
         reports.render(service, product, analysis_id)
     else:
-        _diagnostics(service)
+        intake.render(service)
+
+
+def _security_banner(service: StudioService) -> None:
+    """Make an unauthenticated deployment impossible to miss."""
+    if service.config.auth_enabled:
+        return
+
+    exposure = network_exposure_warning(service.config.auth_enabled)
+    if exposure:
+        # Reachable off-machine with no auth: this is not a dev convenience.
+        st.error(exposure, icon=":material/gpp_bad:")
+    else:
+        st.caption(
+            ":material/lock_open: Development mode — authentication is disabled and "
+            "everyone has full access. Set `PAS_AUTH_ENABLED=true` before exposing "
+            "this to anyone else."
+        )
 
 
 if __name__ == "__main__":

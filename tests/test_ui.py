@@ -35,7 +35,7 @@ def app(tmp_path, monkeypatch):
 
     import pas.ui.app as ui_app
 
-    ui_app._service.clear()  # drop the cached service between tests
+    ui_app._base_service.clear()  # drop the cached service between tests
     yield AppTest.from_file(APP_SCRIPT, default_timeout=TIMEOUT)
     db_module.reset_thread_state()
 
@@ -369,3 +369,81 @@ def test_workroom_renders_empty_analysis_without_crashing(app, tmp_path):
     at.session_state["active_analysis"] = analysis
     at.run()
     _assert_clean(at)
+
+
+# ---------------------------------------------------------------------------
+# Authentication gate
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def secured_app(tmp_path, monkeypatch):
+    """The app with authentication switched ON."""
+    monkeypatch.setenv("PAS_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key-not-used")
+    monkeypatch.setenv("PAS_AUTH_ENABLED", "true")
+
+    import importlib
+
+    from pas import config as config_module
+    from pas.storage import db as db_module
+
+    db_module.reset_thread_state()
+    monkeypatch.setattr(db_module, "DB_PATH", tmp_path / "secure.sqlite3")
+    importlib.reload(config_module)
+
+    import pas.ui.app as ui_app
+
+    ui_app._base_service.clear()
+    yield AppTest.from_file(APP_SCRIPT, default_timeout=TIMEOUT)
+
+    db_module.reset_thread_state()
+    monkeypatch.delenv("PAS_AUTH_ENABLED", raising=False)
+    importlib.reload(config_module)
+
+
+def test_open_mode_shows_the_development_warning(app):
+    at = app.run()
+    _assert_clean(at)
+    text = " ".join(str(c.value) for c in at.caption) + " ".join(
+        str(m.value) for m in at.markdown
+    )
+    assert "authentication is disabled" in text.lower()
+
+
+def test_open_mode_requires_no_login(app):
+    """The dev flow must be completely unobstructed."""
+    at = app.run()
+    _assert_clean(at)
+    rendered = " ".join(str(m.value) for m in at.markdown)
+    assert "Sign in" not in rendered
+    assert "Start an analysis" in rendered or "Products" in rendered
+
+
+def test_enabled_auth_blocks_access_until_signed_in(secured_app):
+    at = secured_app.run()
+    _assert_clean(at)
+
+    rendered = " ".join(str(m.value) for m in at.markdown)
+    # The first-run path offers account creation, not the product workspace.
+    assert "Sign in to continue" in rendered
+    assert "Start an analysis" not in rendered
+
+
+def test_enabled_auth_ignores_a_forged_session_token(secured_app):
+    at = secured_app.run()
+    at.session_state["auth_token"] = "totally-made-up-token"
+    at.run()
+    _assert_clean(at)
+
+    rendered = " ".join(str(m.value) for m in at.markdown)
+    assert "Sign in to continue" in rendered, "a forged token must not grant access"
+
+
+def test_account_page_renders_in_open_mode(app):
+    at = app.run()
+    at.session_state["route"] = "account"
+    at.run()
+    _assert_clean(at)
+    rendered = " ".join(str(m.value) for m in at.markdown)
+    assert "Account & access" in rendered
