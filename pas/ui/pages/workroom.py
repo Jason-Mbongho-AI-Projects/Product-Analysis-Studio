@@ -85,8 +85,6 @@ def render(service: StudioService) -> None:
             "Market",
             "Customers",
             "Scores",
-            "Decision board",
-            "Roadmap",
             "Evidence",
             "Sources",
             "Audit",
@@ -105,14 +103,10 @@ def render(service: StudioService) -> None:
     with tabs[5]:
         _tab_scores(data)
     with tabs[6]:
-        _tab_board(service, data)
-    with tabs[7]:
-        _tab_roadmap(service, product)
-    with tabs[8]:
         _tab_evidence(service, analysis_id)
-    with tabs[9]:
+    with tabs[7]:
         _tab_sources(service, data)
-    with tabs[10]:
+    with tabs[8]:
         _tab_audit(service, product, data)
 
 
@@ -596,7 +590,7 @@ def _tab_scores(data: dict[str, Any]) -> None:
         score_row(score, ScoreDimension(score["dimension"]).label)
 
 
-def _tab_board(service: StudioService, data: dict[str, Any]) -> None:
+def render_board(service: StudioService, data: dict[str, Any]) -> None:
     """AI Product Board (spec 19)."""
     recommendations = data["recommendations"]
     if not recommendations:
@@ -672,7 +666,7 @@ def _tab_board(service: StudioService, data: dict[str, Any]) -> None:
     )
 
 
-def _tab_roadmap(service: StudioService, product: dict) -> None:
+def render_roadmap(service: StudioService, product: dict) -> None:
     roadmap = service.roadmap(product["id"])
 
     with st.form("add_roadmap", clear_on_submit=True):

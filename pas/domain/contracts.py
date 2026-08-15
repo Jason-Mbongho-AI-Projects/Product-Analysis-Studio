@@ -11,20 +11,50 @@ output has depth and property-count limits.
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field
+from typing import Annotated, Any
+
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 
 from .enums import (
+    AlertSeverity,
     BusinessModel,
+    ChangeType,
     CompetitorType,
     EffortSize,
     EvidenceGrade,
+    GrowthChannel,
+    LaunchHorizon,
     MarketSegment,
+    PricingModel,
     ProductMaturity,
     RecommendationVerdict,
     ScoreDimension,
     SourceType,
     ThreatLevel,
 )
+
+
+def _normalise_confidence(value: Any) -> Any:
+    """Coerce a confidence value into the 0.0-1.0 range.
+
+    Models intermittently return ``95`` where the contract asks for ``0.95``,
+    despite the instruction. Strict structured output rejects ``minimum`` /
+    ``maximum`` keywords, so the range cannot be enforced in the schema itself.
+
+    Rescaling beats clamping here: clamping 95 to 1.0 would silently report
+    *maximum* certainty, which is the most damaging possible failure for a
+    platform whose entire premise is honest confidence.
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return value
+    number = float(value)
+    if number > 1.0:
+        number = number / 100.0
+    return max(0.0, min(1.0, number))
+
+
+#: A 0.0-1.0 confidence that tolerates percentage-scale model output.
+Confidence = Annotated[float, BeforeValidator(_normalise_confidence)]
 
 
 class Contract(BaseModel):
@@ -63,7 +93,7 @@ class EvidencedClaim(Contract):
             "Use ai_hypothesis when reasoning from model knowledge alone."
         )
     )
-    confidence: float = Field(description="Confidence from 0.0 to 1.0.")
+    confidence: Confidence = Field(description="Confidence from 0.0 to 1.0.")
     citations: list[SourceCitation] = Field(
         description="Sources backing this claim. Empty list if none exist."
     )
@@ -94,7 +124,7 @@ class IntakeClassification(Contract):
     clarifying_questions: list[str] = Field(
         description="Questions whose answers would most improve this analysis."
     )
-    confidence: float
+    confidence: Confidence
 
 
 # --------------------------------------------------------------------------
@@ -154,7 +184,7 @@ class CompetitorCandidate(Contract):
     threat_level: ThreatLevel
     rationale: str = Field(description="Why this is a competitor to THIS product.")
     grade: EvidenceGrade
-    confidence: float
+    confidence: Confidence
 
 
 class CompetitorDiscovery(Contract):
@@ -178,7 +208,7 @@ class MarketSizeModel(Contract):
     formula: str = Field(description="The arithmetic, e.g. '50,000 hospitals x $24,000'.")
     variables: list[str] = Field(description="Each input with its value and origin.")
     assumptions: list[str]
-    confidence: float
+    confidence: Confidence
     basis: str = Field(description="One of: top_down, bottom_up, value_theory.")
 
 
@@ -215,7 +245,7 @@ class Persona(Contract):
     grade: EvidenceGrade = Field(
         description="ai_hypothesis unless real customer data was supplied."
     )
-    confidence: float
+    confidence: Confidence
 
 
 class CustomerIntelligence(Contract):
@@ -236,7 +266,7 @@ class DimensionScore(Contract):
     explanation: str
     supporting_evidence: list[str]
     assumptions: list[str]
-    confidence: float
+    confidence: Confidence
 
 
 class ScoringResult(Contract):
@@ -268,7 +298,7 @@ class Recommendation(Contract):
     dependencies: list[str]
     expected_outcome: str
     priority: int = Field(description="1 = highest priority.")
-    confidence: float
+    confidence: Confidence
 
 
 class GapAnalysis(Contract):
@@ -290,7 +320,255 @@ class RankedItem(Contract):
     title: str
     detail: str
     severity: str = Field(description="One of: critical, high, medium, low.")
-    confidence: float
+    confidence: Confidence
+
+
+# --------------------------------------------------------------------------
+# Positioning studio (spec 14)
+# --------------------------------------------------------------------------
+
+
+class PositioningOption(Contract):
+    strategy_name: str = Field(
+        description="e.g. Premium Enterprise, AI First, Privacy First, Developer First."
+    )
+    target_customer: str
+    value_proposition: str
+    differentiation: str
+    supporting_evidence: list[str]
+    benefits: list[str]
+    risks: list[str]
+    required_product_changes: list[str]
+    pricing_implications: str
+    gtm_implications: str
+    competitive_reaction_risk: str
+    fit_score: float = Field(
+        description="0-100: how well this strategy fits the product's actual evidence."
+    )
+    confidence: Confidence
+
+
+class ObjectionResponse(Contract):
+    objection: str
+    response: str
+
+
+class PositioningMessaging(Contract):
+    positioning_statement: str = Field(
+        description="For [customer] who [need], [product] is a [category] that [benefit]."
+    )
+    unique_value_proposition: str
+    category_definition: str
+    elevator_pitch: str
+    homepage_headline: str = Field(description="Under 12 words.")
+    homepage_subheadline: str
+    product_description: str
+    sales_narrative: str
+    differentiation_statement: str
+    messaging_hierarchy: list[str] = Field(description="Ordered: primary message first.")
+    objection_handling: list[ObjectionResponse]
+
+
+class PositioningStudio(Contract):
+    options: list[PositioningOption] = Field(
+        description="At least 3 genuinely different strategies, not variations of one."
+    )
+    recommended_strategy: str = Field(description="The strategy_name you recommend.")
+    recommendation_reason: str
+    messaging: PositioningMessaging = Field(
+        description="Messaging written for the RECOMMENDED strategy."
+    )
+
+
+# --------------------------------------------------------------------------
+# Pricing studio (spec 15)
+# --------------------------------------------------------------------------
+
+
+class CompetitorPricePoint(Contract):
+    competitor: str
+    plan_name: str
+    price_monthly_usd: float = Field(
+        description=(
+            "Monthly USD price. Use 0 when the plan is genuinely free. "
+            "Use -1 when the price is not published (custom/contact-sales) or you "
+            "could not establish it. Never guess a number."
+        )
+    )
+    pricing_model: PricingModel
+    notes: str = Field(
+        description="If price is -1, say whether it is contact-sales or simply unknown."
+    )
+    grade: EvidenceGrade = Field(
+        description=(
+            "Grades the price claim. verified_fact only when retrieved material "
+            "states this price - or states the plan is free, or that pricing is "
+            "custom. If you could not establish the price at all, this is at best "
+            "a weak_inference."
+        )
+    )
+    confidence: Confidence
+
+
+class PricingTier(Contract):
+    name: str
+    price_monthly_usd: float = Field(
+        description=(
+            "Monthly USD price. Use 0 for a free tier and -1 for a "
+            "custom/contact-sales tier. Every other tier needs a real number."
+        )
+    )
+    target_segment: str
+    included_capabilities: list[str]
+    limits: str
+    rationale: str
+
+
+class EconomicsInputs(Contract):
+    """Seeds the deterministic simulator. Estimates, clearly labelled as such."""
+
+    arpu_monthly_usd: float = Field(description="Expected average revenue per account.")
+    gross_margin_pct: float = Field(description="0-100.")
+    cac_usd: float = Field(description="Expected customer acquisition cost.")
+    monthly_churn_pct: float = Field(description="0-100. Monthly logo churn.")
+    trial_conversion_pct: float = Field(description="0-100.")
+    monthly_expansion_pct: float = Field(description="0-100. Net expansion per month.")
+    price_elasticity: float = Field(
+        description=(
+            "Negative. % change in demand per 1% price change. "
+            "Typical B2B SaaS -0.5 to -1.5; consumer -1.5 to -3.0."
+        )
+    )
+    basis: str = Field(description="Where these numbers came from. Be honest.")
+
+
+class PricingStudio(Contract):
+    current_assessment: str = Field(description="How this product's pricing stands today.")
+    competitor_pricing: list[CompetitorPricePoint]
+    recommended_model: PricingModel
+    value_metric: str = Field(description="The unit you should charge for, and why.")
+    rationale: str
+    tiers: list[PricingTier]
+    pricing_power: str
+    risks: list[str]
+    assumptions: list[str]
+    economics: EconomicsInputs
+
+
+# --------------------------------------------------------------------------
+# Growth strategy (spec 16)
+# --------------------------------------------------------------------------
+
+
+class ChannelRecommendation(Contract):
+    channel: GrowthChannel
+    fit_score: float = Field(description="0-100 fit for THIS product and buyer.")
+    why_appropriate: str = Field(
+        description="Why this channel suits this product, price point and buying behaviour."
+    )
+    expected_cac: str
+    time_to_traction: str
+    scalability: str
+    effort: EffortSize
+    first_experiment: str = Field(description="The cheapest test that would validate it.")
+    supporting_evidence: list[str]
+    confidence: Confidence
+    priority: int
+
+
+class GrowthStrategy(Contract):
+    primary_motion: str = Field(
+        description="e.g. product-led, sales-led, community-led, partner-led."
+    )
+    motion_rationale: str
+    channels: list[ChannelRecommendation] = Field(
+        description="Score the plausible channels. Include ones you rate poorly and say why."
+    )
+    sequencing: list[str] = Field(description="Ordered: what to do first, second, third.")
+    channels_to_avoid: list[str]
+
+
+# --------------------------------------------------------------------------
+# Go-to-market (spec 17)
+# --------------------------------------------------------------------------
+
+
+class Experiment(Contract):
+    hypothesis: str
+    test: str
+    success_metric: str
+    effort: EffortSize
+
+
+class LaunchPhase(Contract):
+    horizon: LaunchHorizon
+    objectives: list[str]
+    activities: list[str]
+    milestones: list[str]
+    owner_role: str
+
+
+class GTMPlan(Contract):
+    target_segment: str
+    beachhead_rationale: str = Field(description="Why start with this segment specifically.")
+    positioning_summary: str
+    messaging_summary: str
+    pricing_summary: str
+    channel_strategy: str
+    sales_strategy: str
+    launch_strategy: str
+    content_strategy: str
+    partnership_strategy: str
+    metrics: list[str] = Field(description="The few numbers that actually indicate progress.")
+    experiments: list[Experiment]
+    budget_assumptions: list[str]
+    risks: list[str]
+    phases: list[LaunchPhase] = Field(description="One entry per launch horizon.")
+
+
+# --------------------------------------------------------------------------
+# Change detection and alerts (spec 8 / 34)
+# --------------------------------------------------------------------------
+
+
+class DetectedChange(Contract):
+    change_type: ChangeType
+    summary: str = Field(description="What changed, in one sentence.")
+    previous_state: str
+    current_state: str
+    evidence: str = Field(description="What in the source material shows this.")
+    estimated_impact: str
+    severity: AlertSeverity
+    recommended_action: str
+    is_meaningful: bool = Field(
+        description=(
+            "False for cosmetic changes (copy tweaks, layout). Only true when this "
+            "would plausibly change a product or pricing decision."
+        )
+    )
+    confidence: Confidence
+
+
+class ChangeReport(Contract):
+    changes: list[DetectedChange]
+    summary: str
+
+
+# --------------------------------------------------------------------------
+# Conversational answers (spec 25)
+# --------------------------------------------------------------------------
+
+
+class CitedAnswer(Contract):
+    answer: str = Field(description="Direct answer first, then reasoning. Markdown allowed.")
+    used_evidence_ids: list[str] = Field(
+        description="IDs of evidence records you actually relied on. Empty if none applied."
+    )
+    confidence: Confidence
+    caveats: list[str] = Field(
+        description="What you could not determine from the available intelligence."
+    )
+    followup_questions: list[str]
 
 
 class ExecutiveSynthesis(Contract):
@@ -302,4 +580,4 @@ class ExecutiveSynthesis(Contract):
     key_uncertainties: list[str] = Field(
         description="What we could not establish, and what would resolve it."
     )
-    confidence: float
+    confidence: Confidence

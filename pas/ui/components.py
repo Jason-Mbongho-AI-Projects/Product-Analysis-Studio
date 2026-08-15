@@ -199,6 +199,22 @@ def score_row(score: dict[str, Any], dimension_label: str) -> None:
         )
 
 
+def format_price(value: float | None, suffix: str = "") -> str:
+    """Render a price, honouring the free/custom sentinels.
+
+    ``-1`` means custom or contact-sales pricing and ``0`` means free. Both must
+    render as words - "$-1/mo" is the kind of detail that makes a product look
+    broken.
+    """
+    if value is None:
+        return "Unknown"
+    if value < 0:
+        return "Custom"
+    if value == 0:
+        return "Free"
+    return f"${value:,.0f}{suffix}"
+
+
 def threat_chip(level: str) -> str:
     return chip(level.upper(), THREAT_STYLES.get(level, PALETTE["muted"]))
 

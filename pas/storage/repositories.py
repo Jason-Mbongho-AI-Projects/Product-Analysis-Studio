@@ -1212,3 +1212,44 @@ def usage_summary(
         )
     )
     return {**dict(row), "by_model": by_model}
+
+
+# ---------------------------------------------------------------------------
+# Strategy-studio, monitoring and conversation access lives in a sibling module
+# and is re-exported here so callers have a single import surface. The import
+# sits at the end of the file because strategy_repo depends on the helpers
+# defined above.
+# ---------------------------------------------------------------------------
+
+from .strategy_repo import (  # noqa: E402
+    create_alert,
+    create_monitor,
+    delete_monitor,
+    delete_scenario,
+    due_monitors,
+    get_alert,
+    get_growth,
+    get_gtm,
+    get_monitor,
+    get_positioning,
+    get_pricing,
+    latest_snapshot,
+    list_alerts,
+    list_changes,
+    list_conversations,
+    list_monitors,
+    list_scenarios,
+    prune_snapshots,
+    record_change,
+    save_conversation,
+    save_growth,
+    save_gtm,
+    save_positioning,
+    save_pricing,
+    save_scenario,
+    save_snapshot,
+    set_alert_status,
+    set_monitor_enabled,
+    unread_alert_count,
+    update_monitor_run,
+)

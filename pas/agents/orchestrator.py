@@ -18,8 +18,8 @@ from ..domain.enums import AnalysisStatus
 from ..research.engine import ResearchEngine, SiteProvider, UserSourceProvider
 from ..storage import repositories as repo
 from ..storage.db import get_connection
-from .analysts import PIPELINE
 from .base import AnalysisContext, ResearchBundle
+from .pipeline import pipeline_for
 
 ProgressCallback = Callable[[str, str, dict[str, Any]], None]
 
@@ -31,6 +31,7 @@ class AnalysisRequest:
     analysis_id: str
     mode: str = "founder"
     research_enabled: bool = True
+    depth: str = "full"
     extra_urls: list[str] = field(default_factory=list)
 
 
@@ -104,8 +105,9 @@ class AnalysisOrchestrator:
                 emit=lambda event, message, payload: notify(event, message, payload),
             )
 
-            total = len(PIPELINE)
-            for index, agent_cls in enumerate(PIPELINE, start=1):
+            agents = pipeline_for(request.depth)
+            total = len(agents)
+            for index, agent_cls in enumerate(agents, start=1):
                 if cancel_event is not None and cancel_event.is_set():
                     repo.update_analysis_progress(
                         conn,

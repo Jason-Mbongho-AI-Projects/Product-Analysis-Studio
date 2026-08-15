@@ -8,16 +8,27 @@ capabilities without duplicating logic (spec 57).
 from __future__ import annotations
 
 import threading
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .agents.analysts import composite_score
 from .agents.orchestrator import AnalysisOrchestrator, AnalysisRequest
 from .config import AppConfig, load_config
-from .domain.enums import AnalysisStatus, DecisionState, IntakeKind, RoadmapHorizon
+from .domain.enums import (
+    AlertStatus,
+    AnalysisStatus,
+    DecisionState,
+    IntakeKind,
+    RoadmapHorizon,
+)
 from .jobs.runner import JobState, get_runner
 from .research.safety import UnsafeURLError, validate_url
 from .storage import repositories as repo
 from .storage.db import get_connection, migrate
+
+if TYPE_CHECKING:  # imported lazily at runtime to keep UI startup fast
+    from .analysis.ask import Answer
+    from .analysis.finance import Economics
+    from .analysis.reports import Report
 
 
 class StudioService:
@@ -28,6 +39,18 @@ class StudioService:
         self.conn = get_connection()
         migrate(self.conn)
         self.workspace_id = repo.ensure_default_workspace(self.conn)
+        self._llm = None
+
+    def _provider(self):
+        """Lazily construct the model provider for foreground work.
+
+        Background jobs build their own so provider state stays per-thread.
+        """
+        if self._llm is None:
+            from .ai.provider import OpenRouterProvider
+
+            self._llm = OpenRouterProvider(self.config)
+        return self._llm
 
     # -- intake ------------------------------------------------------------
 
@@ -161,6 +184,10 @@ class StudioService:
             "market": repo.get_market(conn, analysis_id),
             "customers": repo.get_customers(conn, analysis_id),
             "recommendations": repo.list_recommendations(conn, analysis_id),
+            "positioning": repo.get_positioning(conn, analysis_id),
+            "pricing": repo.get_pricing(conn, analysis_id),
+            "growth": repo.get_growth(conn, analysis_id),
+            "gtm": repo.get_gtm(conn, analysis_id),
             "quality": repo.evidence_quality_summary(conn, analysis_id),
             "sources": repo.list_sources(conn, analysis_id),
             "usage": repo.usage_summary(conn, self.workspace_id, analysis_id),
@@ -267,6 +294,258 @@ class StudioService:
                 c for c in new_competitors if c["name"].lower() not in old_names
             ],
         }
+
+    # -- pricing simulation (spec 15 / 20) --------------------------------
+
+    def economics_for(self, analysis_id: str, customers: int = 100) -> "Economics":
+        """Seed the simulator from the pricing agent's estimates.
+
+        Falls back to neutral placeholder assumptions when no pricing analysis
+        exists, so the simulator is always usable and the UI can say which is
+        which.
+        """
+        from .analysis.finance import Economics
+
+        pricing = repo.get_pricing(self.conn, analysis_id) if analysis_id else None
+        economics = (pricing or {}).get("economics", {})
+        return Economics(
+            arpu_monthly=float(economics.get("arpu_monthly_usd", 100) or 100),
+            gross_margin_pct=float(economics.get("gross_margin_pct", 75) or 75),
+            cac=float(economics.get("cac_usd", 500) or 500),
+            monthly_churn_pct=float(economics.get("monthly_churn_pct", 4) or 4),
+            monthly_expansion_pct=float(economics.get("monthly_expansion_pct", 0) or 0),
+            customers=customers,
+        )
+
+    def simulate(
+        self,
+        economics: "Economics",
+        *,
+        elasticity: float = -1.0,
+        fixed_costs: float = 0.0,
+        new_customers_per_month: float = 0.0,
+        months: int = 24,
+    ) -> dict[str, Any]:
+        """Run the deterministic pricing and growth simulation."""
+        from .analysis import finance
+
+        curve = finance.price_sensitivity_curve(economics, elasticity)
+        return {
+            "unit_economics": finance.unit_economics(economics),
+            "curve": curve,
+            "optimum": finance.revenue_maximising_change(curve),
+            "break_even": finance.break_even(
+                economics, fixed_costs, new_customers_per_month
+            ),
+            "projection": finance.project(
+                economics, months, new_customers_per_month, fixed_costs
+            ),
+        }
+
+    def save_scenario(
+        self, product_id: str, analysis_id: str | None, label: str, inputs: dict, results: dict
+    ) -> str:
+        return repo.save_scenario(
+            self.conn,
+            workspace_id=self.workspace_id,
+            product_id=product_id,
+            analysis_id=analysis_id,
+            label=label or "Untitled scenario",
+            inputs=inputs,
+            results=results,
+        )
+
+    def list_scenarios(self, product_id: str) -> list[dict[str, Any]]:
+        return repo.list_scenarios(self.conn, product_id)
+
+    def delete_scenario(self, scenario_id: str) -> None:
+        repo.delete_scenario(self.conn, scenario_id)
+
+    # -- Ask (spec 25) -----------------------------------------------------
+
+    def ask(self, product_id: str, analysis_id: str, question: str) -> "Answer":
+        """Answer a question from stored intelligence, with verified citations."""
+        question = (question or "").strip()
+        if not question:
+            raise ValueError("Ask a question first.")
+        if len(question) > 2000:
+            raise ValueError("That question is too long.")
+        if not self.config.is_configured:
+            raise ValueError("No OPENROUTER_API_KEY configured.")
+
+        product = self.get_product(product_id)
+        if product is None:
+            raise ValueError("Product not found.")
+        analysis = self.get_analysis(analysis_id) if analysis_id else None
+        if analysis is None:
+            raise ValueError("Run an analysis before asking questions about it.")
+
+        from .analysis.ask import AskEngine
+
+        engine = AskEngine(
+            self.conn,
+            config=self.config,
+            provider=self._provider(),
+            workspace_id=self.workspace_id,
+        )
+        answer = engine.ask(product, analysis_id, question, mode=analysis.get("mode", "founder"))
+
+        repo.save_conversation(
+            self.conn,
+            workspace_id=self.workspace_id,
+            product_id=product_id,
+            analysis_id=analysis_id,
+            question=question,
+            answer=answer.text,
+            confidence=answer.confidence,
+            caveats=answer.caveats,
+            citations=answer.citations,
+        )
+        return answer
+
+    def conversations(self, product_id: str) -> list[dict[str, Any]]:
+        return repo.list_conversations(self.conn, product_id)
+
+    # -- monitoring and alerts (spec 8 / 33 / 34) -------------------------
+
+    def create_monitor(
+        self, product_id: str, label: str, urls: list[str], interval_hours: int = 168
+    ) -> str:
+        safe_urls: list[str] = []
+        for url in urls:
+            if not url.strip():
+                continue
+            try:
+                safe_urls.append(validate_url(url).url)
+            except UnsafeURLError as exc:
+                raise ValueError(f"Cannot monitor that URL: {exc}") from exc
+        if not safe_urls:
+            raise ValueError("Add at least one URL to monitor.")
+
+        return repo.create_monitor(
+            self.conn,
+            workspace_id=self.workspace_id,
+            product_id=product_id,
+            label=label.strip() or "Untitled monitor",
+            urls=safe_urls,
+            interval_hours=max(1, int(interval_hours)),
+        )
+
+    def monitors(self, product_id: str) -> list[dict[str, Any]]:
+        return repo.list_monitors(self.conn, product_id)
+
+    def set_monitor_enabled(self, monitor_id: str, enabled: bool) -> None:
+        repo.set_monitor_enabled(self.conn, monitor_id, enabled)
+
+    def delete_monitor(self, monitor_id: str) -> None:
+        repo.delete_monitor(self.conn, monitor_id)
+
+    def run_monitor(self, monitor_id: str) -> tuple[str, JobState]:
+        """Run a monitor in the background; results land in the alert centre."""
+        if not self.config.is_configured:
+            raise ValueError("No OPENROUTER_API_KEY configured.")
+        monitor = repo.get_monitor(self.conn, monitor_id)
+        if monitor is None:
+            raise ValueError("Monitor not found.")
+
+        config, workspace_id = self.config, self.workspace_id
+
+        def work(emit, cancel_event: threading.Event):
+            from .analysis.monitoring import ChangeDetector
+            from .ai.provider import OpenRouterProvider
+            from .storage.db import get_connection
+
+            conn = get_connection()
+            detector = ChangeDetector(
+                conn,
+                config=config,
+                provider=OpenRouterProvider(config),
+                workspace_id=workspace_id,
+            )
+            try:
+                emit("monitor_started", f"Checking {len(monitor['urls'])} page(s)", {})
+                run = detector.run_monitor(
+                    monitor,
+                    on_progress=lambda url: emit("monitor_fetch", f"Checking {url}", {}),
+                )
+                emit(
+                    "monitor_done",
+                    f"{run.changes_found} change(s) detected, "
+                    f"{run.alerts_created} alert(s) raised",
+                    {"changes": run.changes_found},
+                )
+                return run
+            finally:
+                detector.close()
+
+        job = get_runner().submit(f"mon_{monitor_id}", monitor_id, work)
+        return monitor_id, job
+
+    def due_monitors(self) -> list[dict[str, Any]]:
+        return repo.due_monitors(self.conn, self.workspace_id)
+
+    def alerts(self, product_id: str, statuses: list[str] | None = None) -> list[dict[str, Any]]:
+        return repo.list_alerts(self.conn, product_id, statuses=statuses)
+
+    def unread_alerts(self, product_id: str) -> int:
+        return repo.unread_alert_count(self.conn, product_id)
+
+    def set_alert_status(self, alert_id: str, status: str) -> None:
+        if status not in {member.value for member in AlertStatus}:
+            raise ValueError(f"Unknown alert status: {status}")
+        repo.set_alert_status(self.conn, alert_id, status)
+
+    def alert_to_roadmap(self, alert_id: str, horizon: str = "next") -> str:
+        """Turn an alert into a tracked roadmap item (spec 34)."""
+        alert = repo.get_alert(self.conn, alert_id)
+        if alert is None:
+            raise ValueError("Alert not found.")
+        item_id = repo.add_roadmap_item(
+            self.conn,
+            workspace_id=alert["workspace_id"],
+            product_id=alert["product_id"],
+            title=alert["title"][:120],
+            detail=alert.get("recommended_action") or alert.get("body", ""),
+            horizon=horizon,
+        )
+        repo.set_alert_status(self.conn, alert_id, AlertStatus.ARCHIVED.value)
+        return item_id
+
+    def changes(self, product_id: str) -> list[dict[str, Any]]:
+        return repo.list_changes(self.conn, product_id)
+
+    # -- reports (spec 30 / 56) -------------------------------------------
+
+    def build_report(self, report_id: str, analysis_id: str) -> "Report":
+        from .analysis import reports
+
+        entry = reports.REPORTS.get(report_id)
+        if entry is None:
+            raise ValueError(f"Unknown report: {report_id}")
+
+        data = self.dashboard(analysis_id)
+        product = self.get_product(data["analysis"]["product_id"])
+        if product is None:
+            raise ValueError("Product not found.")
+        return entry[1](data, product)
+
+    def build_evidence_report(self, analysis_id: str) -> "Report":
+        from .analysis import reports
+
+        data = self.dashboard(analysis_id)
+        product = self.get_product(data["analysis"]["product_id"])
+        if product is None:
+            raise ValueError("Product not found.")
+        return reports.evidence_report(data, product, self.evidence(analysis_id, limit=1000))
+
+    def export_json(self, analysis_id: str) -> str:
+        from .analysis import reports
+
+        data = self.dashboard(analysis_id)
+        product = self.get_product(data["analysis"]["product_id"])
+        if product is None:
+            raise ValueError("Product not found.")
+        return reports.full_export_json(data, product, self.evidence(analysis_id, limit=1000))
 
     # -- diagnostics (spec 51) --------------------------------------------
 

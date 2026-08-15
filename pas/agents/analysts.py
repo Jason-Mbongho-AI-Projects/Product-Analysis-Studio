@@ -414,20 +414,6 @@ class ChiefStrategyAgent(Agent[ExecutiveSynthesis]):
         )
 
 
-#: Execution order. Later agents read earlier agents' persisted output, so this
-#: sequence is a real dependency chain, not a cosmetic ordering.
-PIPELINE: list[type[Agent]] = [
-    IntakeAgent,
-    ProductAnalystAgent,
-    CompetitiveIntelligenceAgent,
-    MarketAnalystAgent,
-    CustomerIntelligenceAgent,
-    ScoringAgent,
-    GapAnalysisAgent,
-    ChiefStrategyAgent,
-]
-
-
 def composite_score(scores: list[dict]) -> dict[str, float]:
     """Compute the headline score from stored dimensions.
 

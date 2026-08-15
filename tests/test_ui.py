@@ -150,6 +150,206 @@ def test_workroom_renders_populated_analysis(app, tmp_path):
     assert "DO NOT BUILD" in rendered, "the do-not-build verdict must be visible"
 
 
+def _seed_strategy(conn, analysis):
+    """Populate the strategy studios so their pages have data to render."""
+    repo.save_positioning(conn, analysis, {
+        "recommended_strategy": "Compliance First",
+        "recommendation_reason": "Audit deadlines drive the purchase.",
+        "messaging": {
+            "positioning_statement": "For hospitals who face audits...",
+            "unique_value_proposition": "Continuous evidence collection",
+            "homepage_headline": "Pass your next audit without the scramble",
+            "homepage_subheadline": "Evidence collection on autopilot",
+            "messaging_hierarchy": ["Audit-ready always"],
+            "objection_handling": [{"objection": "Too expensive", "response": "Cheaper than failing"}],
+        },
+        "options": [
+            {"strategy_name": "Compliance First", "fit_score": 88, "confidence": 0.7,
+             "target_customer": "Hospital CISOs", "value_proposition": "Audit readiness",
+             "differentiation": "Healthcare-specific controls", "benefits": ["Clear buyer"],
+             "risks": ["Narrow market"], "required_product_changes": ["HIPAA mapping"]},
+            {"strategy_name": "Developer First", "fit_score": 42, "confidence": 0.5,
+             "target_customer": "Engineers", "value_proposition": "API-first",
+             "differentiation": "SDKs"},
+        ],
+    })
+    repo.save_pricing(conn, analysis, {
+        "current_assessment": "No pricing published.",
+        "recommended_model": "tiered", "value_metric": "monitored endpoints",
+        "rationale": "Scales with the customer's estate.",
+        "pricing_power": "Moderate", "risks": ["Procurement cycles"],
+        "assumptions": ["Mid-market budgets"],
+        "economics": {"arpu_monthly_usd": 950, "gross_margin_pct": 78, "cac_usd": 4200,
+                      "monthly_churn_pct": 2.0, "monthly_expansion_pct": 1.0,
+                      "price_elasticity": -0.8, "basis": "Comparable healthcare SaaS"},
+        "tiers": [{"name": "Team", "price_monthly_usd": 499, "target_segment": "Clinics",
+                   "included_capabilities": ["Dashboards"], "limits": "50 endpoints"}],
+        "competitor_pricing": [
+            {"competitor": "Rival", "plan_name": "Pro", "price_monthly_usd": 799,
+             "pricing_model": "subscription", "grade": "verified_fact", "confidence": 0.9},
+            {"competitor": "Opaque", "plan_name": "Enterprise", "price_monthly_usd": -1,
+             "pricing_model": "enterprise", "grade": "ai_hypothesis", "confidence": 0.2},
+        ],
+    })
+    repo.save_growth(conn, analysis, {
+        "primary_motion": "sales-led", "motion_rationale": "High ACV, committee buying.",
+        "sequencing": ["Design partners first"], "channels_to_avoid": ["Paid social"],
+        "channels": [
+            {"channel": "outbound_sales", "fit_score": 84, "priority": 1,
+             "why_appropriate": "Named accounts are enumerable",
+             "first_experiment": "50 targeted emails", "effort": "m",
+             "expected_cac": "$4-6k", "time_to_traction": "2 quarters",
+             "scalability": "Linear", "confidence": 0.6,
+             "supporting_evidence": ["Buyers are identifiable"]},
+        ],
+    })
+    repo.save_gtm(conn, analysis, {
+        "target_segment": "Mid-market hospital systems",
+        "beachhead_rationale": "Enough budget, less procurement friction.",
+        "launch_strategy": "Design partner cohort", "channel_strategy": "Outbound",
+        "sales_strategy": "Founder-led", "content_strategy": "Compliance guides",
+        "partnership_strategy": "MSP channel", "pricing_summary": "Tiered",
+        "messaging_summary": "Audit readiness", "positioning_summary": "Compliance first",
+        "metrics": ["Design partners signed"], "budget_assumptions": ["$50k pilot"],
+        "risks": ["Long cycles"],
+        "experiments": [{"hypothesis": "CISOs respond to audit framing", "test": "A/B email",
+                         "success_metric": "Reply rate", "effort": "s"}],
+        "phases": [
+            {"horizon": "30_days", "objectives": ["Landing page"], "activities": ["Write copy"],
+             "milestones": ["Page live"], "owner_role": "Founder"},
+            {"horizon": "90_days", "objectives": ["Five design partners"],
+             "activities": ["Outbound"], "milestones": ["5 signed"], "owner_role": "Founder"},
+        ],
+    })
+    conn.commit()
+
+
+def test_strategy_pages_render(app, tmp_path):
+    from pas.storage import db as db_module
+
+    conn = db_module.get_connection(tmp_path / "ui.sqlite3")
+    db_module.migrate(conn)
+    workspace = repo.ensure_default_workspace(conn)
+    product = repo.create_product(conn, workspace_id=workspace, name="Strat",
+                                  intake_kind="idea", intake_input="idea")
+    analysis = repo.create_analysis(conn, workspace_id=workspace, product_id=product)["id"]
+    repo.update_analysis_progress(conn, analysis, status="complete", completed=True)
+    _seed_strategy(conn, analysis)
+
+    at = app.run()
+    at.session_state["route"] = "strategy"
+    at.session_state["active_product"] = product
+    at.session_state["active_analysis"] = analysis
+    at.run()
+    _assert_clean(at)
+
+    rendered = " ".join(str(m.value) for m in at.markdown)
+    assert "Compliance First" in rendered
+    assert "Pass your next audit" in rendered
+
+
+def test_reports_page_offers_downloads(app, tmp_path):
+    from pas.storage import db as db_module
+
+    conn = db_module.get_connection(tmp_path / "ui.sqlite3")
+    db_module.migrate(conn)
+    workspace = repo.ensure_default_workspace(conn)
+    product = repo.create_product(conn, workspace_id=workspace, name="Rep",
+                                  intake_kind="idea", intake_input="idea")
+    analysis = repo.create_analysis(conn, workspace_id=workspace, product_id=product)["id"]
+    repo.update_analysis_progress(conn, analysis, status="complete", completed=True)
+    _seed_strategy(conn, analysis)
+    repo.save_scores(conn, analysis, [
+        {"dimension": "market_opportunity", "score": 70, "confidence": 0.6,
+         "explanation": "x", "assumptions": [], "supporting_evidence": []}
+    ])
+
+    at = app.run()
+    at.session_state["route"] = "reports"
+    at.session_state["active_product"] = product
+    at.session_state["active_analysis"] = analysis
+    at.run()
+    _assert_clean(at)
+
+
+def test_ask_page_renders_without_a_question(app, tmp_path):
+    from pas.storage import db as db_module
+
+    conn = db_module.get_connection(tmp_path / "ui.sqlite3")
+    db_module.migrate(conn)
+    workspace = repo.ensure_default_workspace(conn)
+    product = repo.create_product(conn, workspace_id=workspace, name="Ask",
+                                  intake_kind="idea", intake_input="idea")
+    analysis = repo.create_analysis(conn, workspace_id=workspace, product_id=product)["id"]
+    repo.update_analysis_progress(conn, analysis, status="complete", completed=True)
+
+    at = app.run()
+    at.session_state["route"] = "ask"
+    at.session_state["active_product"] = product
+    at.session_state["active_analysis"] = analysis
+    at.run()
+    _assert_clean(at)
+
+
+def test_alerts_page_renders_and_shows_severity_order(app, tmp_path):
+    from pas.storage import db as db_module
+
+    conn = db_module.get_connection(tmp_path / "ui.sqlite3")
+    db_module.migrate(conn)
+    workspace = repo.ensure_default_workspace(conn)
+    product = repo.create_product(conn, workspace_id=workspace, name="Alert",
+                                  intake_kind="idea", intake_input="idea")
+    repo.create_alert(conn, workspace_id=workspace, product_id=product,
+                      category="pricing", severity="critical",
+                      title="Rival cut Professional from $49 to $39",
+                      body="Was: $49. Now: $39.",
+                      recommended_action="Review our own pricing")
+    conn.commit()
+
+    at = app.run()
+    at.session_state["route"] = "alerts"
+    at.session_state["active_product"] = product
+    at.run()
+    _assert_clean(at)
+
+    rendered = " ".join(str(m.value) for m in at.markdown)
+    assert "$49 to $39" in rendered
+
+
+def test_decide_page_renders(app, tmp_path):
+    from pas.storage import db as db_module
+
+    conn = db_module.get_connection(tmp_path / "ui.sqlite3")
+    db_module.migrate(conn)
+    workspace = repo.ensure_default_workspace(conn)
+    product = repo.create_product(conn, workspace_id=workspace, name="Dec",
+                                  intake_kind="idea", intake_input="idea")
+    analysis = repo.create_analysis(conn, workspace_id=workspace, product_id=product)["id"]
+    repo.update_analysis_progress(conn, analysis, status="complete", completed=True)
+    repo.save_recommendations(conn, workspace_id=workspace, analysis_id=analysis,
+        product_id=product, recommendations=[
+            {"title": "Ship SSO", "gap_category": "security", "verdict": "must_build",
+             "reason": "Enterprise blocker", "priority": 1, "confidence": 0.8}])
+    conn.commit()
+
+    at = app.run()
+    at.session_state["route"] = "decide"
+    at.session_state["active_product"] = product
+    at.session_state["active_analysis"] = analysis
+    at.run()
+    _assert_clean(at)
+    assert "Ship SSO" in " ".join(str(m.value) for m in at.markdown)
+
+
+def test_product_scoped_routes_fall_back_without_a_product(app):
+    """Selecting a product-scoped route with no product must not crash."""
+    at = app.run()
+    at.session_state["route"] = "strategy"
+    at.session_state["active_product"] = None
+    at.run()
+    _assert_clean(at)
+
+
 def test_workroom_renders_empty_analysis_without_crashing(app, tmp_path):
     """An analysis where every agent failed must still render."""
     from pas.storage import db as db_module

@@ -9,7 +9,8 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from pas.agents.analysts import PIPELINE, composite_score
+from pas.agents.analysts import composite_score
+from pas.agents.pipeline import FULL_PIPELINE as PIPELINE
 from pas.agents.base import Agent, AnalysisContext, BudgetExceeded, ResearchBundle
 from pas.ai.provider import Completion, LLMProvider, ProviderError, Usage
 from pas.ai.schema import to_strict_schema
@@ -59,7 +60,24 @@ ALL_CONTRACTS = [
     C.ScoringResult,
     C.GapAnalysis,
     C.ExecutiveSynthesis,
+    C.PositioningStudio,
+    C.PricingStudio,
+    C.GrowthStrategy,
+    C.GTMPlan,
+    C.ChangeReport,
+    C.CitedAnswer,
 ]
+
+
+def test_every_pipeline_agent_contract_is_covered():
+    """Guards against adding an agent whose schema is never strict-checked."""
+    from pas.agents.pipeline import FULL_PIPELINE
+
+    covered = {contract.__name__ for contract in ALL_CONTRACTS}
+    for agent in FULL_PIPELINE:
+        assert agent.contract.__name__ in covered, (
+            f"{agent.name} uses {agent.contract.__name__}, which is not in ALL_CONTRACTS"
+        )
 
 
 @pytest.mark.parametrize("contract", ALL_CONTRACTS)
@@ -216,6 +234,9 @@ def test_pipeline_is_ordered_and_unique():
     assert len(names) == len(set(names))
     assert names[0] == "intake", "classification must run first"
     assert names[-1] == "chief_strategy", "synthesis must run last"
+    # GTM consumes positioning, pricing and growth output.
+    for upstream in ("positioning_strategist", "pricing_strategist", "growth_strategist"):
+        assert names.index(upstream) < names.index("gtm_strategist")
     # Gap analysis reads competitors, so discovery must precede it.
     assert names.index("competitive_intelligence") < names.index("gap_analysis")
     assert names.index("scoring") < names.index("chief_strategy")
@@ -252,3 +273,85 @@ def test_evidence_grades_classify_backing_correctly():
     assert EvidenceGrade.USER_SUPPLIED.is_evidence_backed
     assert not EvidenceGrade.AI_HYPOTHESIS.is_evidence_backed
     assert not EvidenceGrade.WEAK_INFERENCE.is_evidence_backed
+
+
+# ---------------------------------------------------------------------------
+# Confidence normalisation
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "given,expected",
+    [
+        (0.95, 0.95),      # already correct
+        (95, 0.95),        # percentage scale - the observed failure mode
+        (85.0, 0.85),      # percentage as float
+        (100, 1.0),
+        (1, 1.0),          # ambiguous, but 1.0 is the honest reading
+        (0, 0.0),
+        (-0.5, 0.0),       # clamped
+        (150, 1.0),        # rescaled then clamped
+    ],
+)
+def test_confidence_is_normalised_not_clamped(given, expected):
+    """A model returning 95 must become 0.95, never 1.0.
+
+    Clamping would report maximum certainty for what was meant as 95% - the
+    most damaging possible failure for an evidence-graded platform.
+    """
+    claim = C.EvidencedClaim.model_validate(
+        {"claim": "c", "detail": "d", "grade": "ai_hypothesis",
+         "confidence": given, "citations": []}
+    )
+    assert claim.confidence == pytest.approx(expected)
+
+
+def test_percentage_confidence_does_not_become_false_certainty():
+    claim = C.EvidencedClaim.model_validate(
+        {"claim": "c", "detail": "d", "grade": "ai_hypothesis",
+         "confidence": 40, "citations": []}
+    )
+    assert claim.confidence == pytest.approx(0.4)
+    assert claim.confidence < 1.0
+
+
+def test_confidence_normalisation_applies_across_contracts():
+    """Every contract carrying confidence must use the normalising type."""
+    answer = C.CitedAnswer.model_validate(
+        {"answer": "a", "used_evidence_ids": [], "confidence": 85,
+         "caveats": [], "followup_questions": []}
+    )
+    assert answer.confidence == pytest.approx(0.85)
+
+    score = C.DimensionScore.model_validate(
+        {"dimension": "market_opportunity", "score": 70, "explanation": "e",
+         "supporting_evidence": [], "assumptions": [], "confidence": 60}
+    )
+    assert score.confidence == pytest.approx(0.6)
+    assert score.score == 70, "0-100 scores must NOT be rescaled"
+
+
+def test_every_confidence_field_uses_the_normalising_type():
+    """Guards against a new contract field reintroducing raw float confidence."""
+    import inspect
+
+    from pas.domain import contracts as module
+
+    offenders = []
+    for name, obj in vars(module).items():
+        if not (inspect.isclass(obj) and issubclass(obj, C.Contract)):
+            continue
+        for field_name, field in obj.model_fields.items():
+            if "confidence" not in field_name:
+                continue
+            probe = {field_name: 90}
+            try:
+                normalised = obj.__pydantic_validator__.validate_assignment(
+                    obj.model_construct(), field_name, 90
+                )
+                value = getattr(normalised, field_name)
+            except Exception:
+                continue
+            if value > 1.0:
+                offenders.append(f"{obj.__name__}.{field_name}")
+    assert not offenders, f"raw float confidence fields: {offenders}"

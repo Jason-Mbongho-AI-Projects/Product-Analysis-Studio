@@ -248,6 +248,126 @@ class AgentRunStatus(StrEnum):
     SKIPPED = "skipped"
 
 
+class PricingModel(StrEnum):
+    """Monetisation shapes the pricing studio can recommend (spec 15)."""
+
+    FREE = "free"
+    FREEMIUM = "freemium"
+    FREE_TRIAL = "free_trial"
+    SUBSCRIPTION = "subscription"
+    USAGE_BASED = "usage_based"
+    PER_SEAT = "per_seat"
+    TIERED = "tiered"
+    ENTERPRISE = "enterprise"
+    TRANSACTION = "transaction"
+    HYBRID = "hybrid"
+    CREDIT_BASED = "credit_based"
+
+    @property
+    def label(self) -> str:
+        return self.value.replace("_", " ").title()
+
+
+class GrowthChannel(StrEnum):
+    """Acquisition channels scored by the growth agent (spec 16)."""
+
+    SEO = "seo"
+    CONTENT = "content"
+    YOUTUBE = "youtube"
+    SOCIAL = "social"
+    PARTNERSHIPS = "partnerships"
+    AFFILIATES = "affiliates"
+    COMMUNITIES = "communities"
+    PAID_SEARCH = "paid_search"
+    PAID_SOCIAL = "paid_social"
+    INFLUENCERS = "influencers"
+    PRODUCT_LED = "product_led"
+    OUTBOUND_SALES = "outbound_sales"
+    ENTERPRISE_SALES = "enterprise_sales"
+    MARKETPLACES = "marketplaces"
+    INTEGRATIONS = "integrations"
+    REFERRAL = "referral"
+
+    @property
+    def label(self) -> str:
+        return {
+            "seo": "SEO",
+            "youtube": "YouTube",
+            "paid_search": "Paid search",
+            "paid_social": "Paid social",
+            "product_led": "Product-led growth",
+        }.get(self.value, self.value.replace("_", " ").title())
+
+
+class LaunchHorizon(StrEnum):
+    """GTM launch phases (spec 17)."""
+
+    D30 = "30_days"
+    D60 = "60_days"
+    D90 = "90_days"
+    M6 = "6_months"
+    M12 = "12_months"
+
+    @property
+    def label(self) -> str:
+        return {
+            "30_days": "First 30 days",
+            "60_days": "Days 30-60",
+            "90_days": "Days 60-90",
+            "6_months": "Months 3-6",
+            "12_months": "Months 6-12",
+        }[self.value]
+
+
+class AlertCategory(StrEnum):
+    COMPETITOR = "competitor"
+    MARKET = "market"
+    CUSTOMER = "customer"
+    PRODUCT = "product"
+    PRICING = "pricing"
+    RISK = "risk"
+    OPPORTUNITY = "opportunity"
+    RECOMMENDATION = "recommendation"
+
+
+class AlertSeverity(StrEnum):
+    INFORMATIONAL = "informational"
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    CRITICAL = "critical"
+
+    @property
+    def rank(self) -> int:
+        return {
+            "informational": 0,
+            "low": 1,
+            "medium": 2,
+            "high": 3,
+            "critical": 4,
+        }[self.value]
+
+
+class AlertStatus(StrEnum):
+    UNREAD = "unread"
+    READ = "read"
+    ARCHIVED = "archived"
+    SNOOZED = "snoozed"
+
+
+class ChangeType(StrEnum):
+    """What changed about a competitor between snapshots (spec 8)."""
+
+    PRICING = "pricing"
+    FEATURE_ADDED = "feature_added"
+    FEATURE_REMOVED = "feature_removed"
+    POSITIONING = "positioning"
+    INTEGRATION = "integration"
+    SECURITY = "security"
+    CONTENT = "content"
+    OTHER = "other"
+
+
 class AnalysisMode(StrEnum):
     """Lenses over the same intelligence (spec 58-62)."""
 
