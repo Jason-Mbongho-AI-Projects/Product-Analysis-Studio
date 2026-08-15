@@ -81,17 +81,17 @@ Verified against the specification. Nothing in the spec was implemented at basel
 | 43 | Auditability | None | **Done** | Agent, model, timestamp, evidence per finding |
 | 44 | Observability | None | **Done** | Runs, latency, failures, structured events |
 | 45 | Background jobs | None | **Done** | Thread pool, progress, cancel |
-| 46 | Database design | None | **Done** | 49 tables, FKs, indexes, 5 atomic migrations |
+| 46 | Database design | None | **Done** | 51 tables, FKs, indexes, 6 atomic migrations |
 | 47 | UX | Basic | **Done** | Executive cards, tabs, drilldowns, progressive disclosure |
 | 48/50 | Progressive analysis | None | **Done** | Section-ready events, live progress |
 | 49 | Onboarding | None | **Done** | Minimal, mode-aware |
 | 51 | Admin diagnostics | None | **Done** | Provider, spend, failures, config |
-| 52 | Testing | None | **Done** | 366 tests on security + correctness paths |
+| 52 | Testing | None | **Done** | 397 tests on security + correctness paths |
 | 53 | Accessibility | Broken | **Done** | WCAG AA contrast verified by test; focus states asserted |
 | 54 | Performance | N/A | **Partial** | Indexed, capped, paginated reads |
 | 55 | Mobile | None | **Partial** | Responsive breakpoints |
 | 56 | Export / sharing | None | **Done** | Download + structured export |
-| 57 | Public API | None | **Missing** | Service layer is API-ready; not exposed |
+| 57 | Public API | None | **Done** | 13 endpoints, scoped keys, rate limited, off by default |
 | 58–62 | Modes | None | **Done** | Mode steers synthesis and reorders the executive view |
 
 ---
@@ -124,6 +124,7 @@ Not claimed — executed:
 | GitHub provider (live) | Read plausible/analytics: 28,559 stars, licence, releases |
 | Sitemap provider (live) | Found /security and /compliance that path-guessing missed |
 | WCAG contrast | Body, muted, status and grade colours all pass AA |
+| HTTP API (live uvicorn) | 401 unauthenticated, 401 bad key, 200 with key, 403 read-key write |
 | Auth: login enumeration | Identical message AND timing for unknown vs wrong password |
 | Auth: forged session token | Rejected; app returns to the sign-in gate |
 | Auth: RBAC at service boundary | Viewer/analyst/PM denied per the matrix |
@@ -162,11 +163,6 @@ superseded by eight specialised agents.
 
 Every capability section of the specification is now built, except where the
 spec itself scopes it out or a publisher's terms forbid it.
-
-**Public API (§57)** — deliberately not built. The specification says not to
-expose one unless appropriate for this phase. The service layer *is* the API
-surface: UI-free, permission-checked, returning plain data. Putting HTTP in
-front of it is additive work, not a refactor.
 
 **App stores and review sites (§5)** — Apple, Google Play, G2, Capterra and
 Trustpilot publish no free API for review data, and their terms prohibit

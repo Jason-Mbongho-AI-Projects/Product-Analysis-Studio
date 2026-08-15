@@ -50,6 +50,10 @@ MAX_LLM_CALLS_PER_ANALYSIS = int(os.getenv("PAS_MAX_LLM_CALLS", "60"))
 SCHEDULER_ENABLED = os.getenv("PAS_SCHEDULER", "").lower() in {"1", "true", "yes", "on"}
 SCHEDULER_TICK_SECONDS = int(os.getenv("PAS_SCHEDULER_TICK", "300"))
 
+# HTTP API (spec 57). Off by default and run as a separate process, so it can
+# never start as a side effect of opening the UI.
+API_ENABLED = os.getenv("PAS_API_ENABLED", "").lower() in {"1", "true", "yes", "on"}
+
 
 # Authentication (spec 41).
 #
@@ -82,6 +86,7 @@ class AppConfig:
     auth_enabled: bool = AUTH_ENABLED
     allow_signup: bool = ALLOW_SELF_SIGNUP
     scheduler_enabled: bool = SCHEDULER_ENABLED
+    api_enabled: bool = API_ENABLED
     embeddings_enabled: bool = EMBEDDINGS_ENABLED
     embedding_model: str = EMBEDDING_MODEL
     default_role: str = DEFAULT_MEMBER_ROLE
@@ -108,6 +113,7 @@ def load_config() -> AppConfig:
         auth_enabled=AUTH_ENABLED,
         allow_signup=ALLOW_SELF_SIGNUP,
         scheduler_enabled=SCHEDULER_ENABLED,
+        api_enabled=API_ENABLED,
         embeddings_enabled=EMBEDDINGS_ENABLED,
         embedding_model=EMBEDDING_MODEL,
         default_role=DEFAULT_MEMBER_ROLE,

@@ -981,6 +981,50 @@ class StudioService:
         self.auth.set_password(user_id, new_password)
         self._audit("user.password_reset", target_type="user", target_id=user_id)
 
+    # -- API keys (spec 57) ------------------------------------------------
+
+    def issue_api_key(
+        self,
+        name: str,
+        scopes: str = "read",
+        rate_per_minute: int = 60,
+        expires_in_days: int | None = None,
+    ):
+        """Issue an API key. The secret is returned once and never again."""
+        self.require(Permission.MANAGE_WORKSPACE)
+        from .api import keys as key_store
+
+        issued = key_store.issue_key(
+            self.conn,
+            workspace_id=self.workspace_id,
+            name=name,
+            scopes=scopes,
+            rate_per_minute=rate_per_minute,
+            expires_in_days=expires_in_days,
+            created_by=None if self.identity.is_dev else self.identity.user_id,
+        )
+        self._audit("api_key.issued", target_type="api_key", target_id=issued.id,
+                    detail=f"{name} scopes={scopes}")
+        return issued
+
+    def api_keys(self) -> list[dict[str, Any]]:
+        self.require(Permission.MANAGE_WORKSPACE)
+        from .api import keys as key_store
+
+        return key_store.list_keys(self.conn, self.workspace_id)
+
+    def revoke_api_key(self, key_id: str) -> None:
+        self.require(Permission.MANAGE_WORKSPACE)
+        from .api import keys as key_store
+
+        key_store.revoke_key(self.conn, key_id)
+        self._audit("api_key.revoked", target_type="api_key", target_id=key_id)
+
+    def api_usage(self) -> dict[str, Any]:
+        from .api import keys as key_store
+
+        return key_store.usage_summary(self.conn, self.workspace_id)
+
     # -- diagnostics (spec 51) --------------------------------------------
 
     def diagnostics(self) -> dict[str, Any]:

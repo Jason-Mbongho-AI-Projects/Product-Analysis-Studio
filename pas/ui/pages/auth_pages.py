@@ -129,7 +129,9 @@ def render_account(service: StudioService) -> None:
             icon=":material/lock_open:",
         )
 
-    tabs = st.tabs(["Your account", "Members", "Roles", "Activity", "Audit log"])
+    tabs = st.tabs(
+        ["Your account", "Members", "Roles", "API keys", "Activity", "Audit log"]
+    )
     with tabs[0]:
         _account_tab(service)
     with tabs[1]:
@@ -137,8 +139,10 @@ def render_account(service: StudioService) -> None:
     with tabs[2]:
         _roles_tab(service)
     with tabs[3]:
-        _activity_tab(service)
+        _api_keys_tab(service)
     with tabs[4]:
+        _activity_tab(service)
+    with tabs[5]:
         _audit_tab(service)
 
 
@@ -312,6 +316,80 @@ def _roles_tab(service: StudioService) -> None:
                     f"{'✓' if held else '·'} {esc(permission.label)}</span>",
                     unsafe_allow_html=True,
                 )
+
+
+def _api_keys_tab(service: StudioService) -> None:
+    """Issue and revoke HTTP API keys (spec 57)."""
+    if not service.identity.can(Permission.MANAGE_WORKSPACE):
+        st.caption("Your role does not allow managing API keys.")
+        return
+
+    st.caption(
+        "The HTTP API runs as a separate process and is disabled by default. "
+        "Start it with `PAS_API_ENABLED=true python -m pas.api`."
+    )
+
+    usage = service.api_usage()
+    cols = st.columns(3)
+    cols[0].metric("Requests", f"{usage.get('requests', 0):,}")
+    cols[1].metric("Errors", f"{usage.get('errors') or 0:,}")
+    cols[2].metric("Avg latency", f"{float(usage.get('avg_ms') or 0):.0f} ms")
+
+    issued = st.session_state.pop("issued_api_key", None)
+    if issued:
+        st.success("Key created. Copy it now — it cannot be shown again.")
+        st.code(issued, language=None)
+
+    with st.form("issue_key", clear_on_submit=True):
+        cols = st.columns([2, 1, 1])
+        name = cols[0].text_input("Key name", placeholder="e.g. Reporting pipeline")
+        scopes = cols[1].selectbox(
+            "Scope", ["read", "read,write"],
+            help="Write keys can start analyses and spend against your API budget.",
+        )
+        rate = cols[2].number_input("Requests/min", min_value=1, max_value=600, value=60)
+        expiry = st.number_input(
+            "Expires in days (0 = never)", min_value=0, max_value=3650, value=90
+        )
+        if st.form_submit_button("Issue key", type="primary"):
+            try:
+                key = service.issue_api_key(
+                    name, scopes, int(rate), int(expiry) or None
+                )
+            except ValueError as exc:
+                st.error(str(exc), icon=":material/error:")
+            else:
+                st.session_state["issued_api_key"] = key.secret
+                st.rerun()
+
+    existing = service.api_keys()
+    if not existing:
+        empty_state("No API keys issued")
+        return
+
+    for key in existing:
+        with st.container(border=True):
+            head, action = st.columns([4, 1])
+            with head:
+                status = "revoked" if key["revoked"] else "active"
+                st.markdown(f"**{esc(key['name'])}** · `{esc(key['key_prefix'])}…`")
+                st.caption(
+                    f"{key['scopes']} · {key['rate_per_minute']}/min · {status} · "
+                    f"{key['request_count']} requests · "
+                    + (
+                        f"last used {str(key['last_used_at'])[:16].replace('T', ' ')}"
+                        if key["last_used_at"] else "never used"
+                    )
+                    + (
+                        f" · expires {str(key['expires_at'])[:10]}"
+                        if key["expires_at"] else " · no expiry"
+                    )
+                )
+            if not key["revoked"] and action.button(
+                "Revoke", key=f"rvk_{key['id']}", use_container_width=True
+            ):
+                service.revoke_api_key(key["id"])
+                st.rerun()
 
 
 def _activity_tab(service: StudioService) -> None:

@@ -79,6 +79,7 @@ pas/
 │   ├── migrations/       Versioned SQL
 │   ├── repositories.py   Workspace-scoped data access
 │   └── strategy_repo.py  Strategy, monitoring and conversation access
+├── api/                  HTTP API, keys, rate limiting (off by default)
 ├── auth/                 Passwords, roles, sessions, membership
 ├── jobs/
 │   ├── runner.py         Background thread pool for long analyses
@@ -190,6 +191,9 @@ streamlit run app.py
 | `PAS_SCHEDULER_TICK` | `300` | Seconds between scheduler checks. |
 | `PAS_EMBEDDINGS` | `true` | Semantic retrieval for Ask. Cached per claim. |
 | `PAS_EMBEDDING_MODEL` | `openai/text-embedding-3-small` | Embedding model. |
+| `PAS_API_ENABLED` | `false` | HTTP API. Runs as a separate process. |
+| `PAS_API_HOST` | `127.0.0.1` | API bind address. |
+| `PAS_API_PORT` | `8000` | API port. |
 | `PAS_FAST_MODEL` | `openai/gpt-4.1-mini` | Model for mechanical tasks |
 | `PAS_DEEP_MODEL` | `openai/gpt-4.1-mini` | Model for reasoning-heavy agents |
 | `PAS_DATA_DIR` | `./data` | SQLite location |
@@ -293,6 +297,50 @@ this is enforced in code rather than left to the prompt.
 
 ---
 
+## HTTP API
+
+Disabled by default. Issue a key from **Account → API keys**, then:
+
+```bash
+PAS_API_ENABLED=true python -m pas.api
+```
+
+It runs as a **separate process** from the UI and binds to loopback unless told
+otherwise. Authenticate with `Authorization: Bearer pas_...`.
+
+| Endpoint | Scope | Returns |
+|---|---|---|
+| `GET /health` | none | Liveness. Reveals nothing about the workspace. |
+| `GET /v1/products` | read | Products in the key's workspace |
+| `GET /v1/products/{id}/analysis` | read | Latest analysis status and score |
+| `GET /v1/products/{id}/score` | read | Composite plus every dimension |
+| `GET /v1/products/{id}/competitors` | read | The competitive set |
+| `GET /v1/products/{id}/recommendations` | read | Recommendations and decisions |
+| `GET /v1/products/{id}/market` | read | Market analysis and sizing |
+| `GET /v1/products/{id}/radar` | read | Opportunities and threats |
+| `GET /v1/products/{id}/evidence` | read | The evidence ledger |
+| `GET /v1/products/{id}/export` | read | Full structured export |
+| `POST /v1/simulate` | write | Deterministic pricing simulation (no model cost) |
+| `POST /v1/products` | write | Create a product and start an analysis |
+| `POST /v1/products/{id}/ask` | write | Ask a question, with verified citations |
+
+**Security properties:**
+
+* Keys are scoped to **one workspace**, so a key cannot read another tenant's
+  data even if an id is guessed.
+* A **read key can never spend money** — starting an analysis or asking a
+  question requires the `write` scope.
+* Only a hash of each key is stored; the secret is shown once at creation.
+* Rate limiting is a per-key token bucket, returning `429` with `Retry-After`.
+* Unknown, revoked and expired keys are indistinguishable in the response.
+
+Keys are hashed with SHA-256 rather than scrypt. That is deliberate: a key is
+256 bits of `secrets.token_urlsafe` output, so there is no dictionary to attack,
+and a slow KDF would add ~120ms to every request for no security gain. scrypt is
+the right choice for human-chosen passwords, not for high-entropy secrets.
+
+---
+
 ## Authentication
 
 **Authentication is off by default** so `streamlit run app.py` works immediately
@@ -378,9 +426,6 @@ Honest scope statement — see `AUDIT.md` for the full roadmap:
   directly from the Members tab; doing so revokes that account's sessions.
 - The scheduler runs only while the app process is alive. For unattended
   monitoring, point cron at `StudioService.run_due_monitors()`.
-- **No public API.** The service layer is the API surface — UI-free and
-  permission-checked — but nothing is exposed over HTTP. The spec scoped that
-  out of this phase.
 - **App stores and review sites are not scraped.** They offer no free review
   API and prohibit automated collection. Export your reviews and upload them
   through Voice of Customer instead.
