@@ -124,6 +124,11 @@ def _sidebar(service: StudioService, product: dict | None) -> str:
             st.caption("No product selected.")
 
         st.markdown("---")
+        mentions = service.mentions()
+        if mentions:
+            st.info(
+                f"{len(mentions)} mention(s) awaiting you", icon=":material/alternate_email:"
+            )
         st.caption(f"{esc(identity.label)} · {identity.role.label}")
         if identity.is_dev:
             st.warning("Auth disabled (dev)", icon=":material/lock_open:")
@@ -202,6 +207,17 @@ def _diagnostics(service: StudioService) -> None:
         st.markdown("#### Running jobs")
         for job in jobs:
             st.caption(f"{job.job_id} — {job.status} ({len(job.events)} events)")
+
+    st.markdown("#### Semantic retrieval")
+    retrieval = service.retrieval_stats()
+    cols = st.columns(3)
+    cols[0].metric("Cached vectors", f"{retrieval['cached_vectors']:,}")
+    cols[1].metric("Cache size", f"{retrieval['cache_bytes'] / 1024:,.0f} KB")
+    cols[2].metric("Enabled", "yes" if retrieval["enabled"] else "no")
+    st.caption(
+        f"Model: {retrieval['model']}. Embeddings are cached by content hash, so "
+        "a claim is embedded once regardless of how many questions reference it."
+    )
 
     st.markdown("#### Monitor scheduler")
     state = service.scheduler_state()

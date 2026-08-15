@@ -129,7 +129,7 @@ def render_account(service: StudioService) -> None:
             icon=":material/lock_open:",
         )
 
-    tabs = st.tabs(["Your account", "Members", "Roles", "Audit log"])
+    tabs = st.tabs(["Your account", "Members", "Roles", "Activity", "Audit log"])
     with tabs[0]:
         _account_tab(service)
     with tabs[1]:
@@ -137,6 +137,8 @@ def render_account(service: StudioService) -> None:
     with tabs[2]:
         _roles_tab(service)
     with tabs[3]:
+        _activity_tab(service)
+    with tabs[4]:
         _audit_tab(service)
 
 
@@ -310,6 +312,52 @@ def _roles_tab(service: StudioService) -> None:
                     f"{'✓' if held else '·'} {esc(permission.label)}</span>",
                     unsafe_allow_html=True,
                 )
+
+
+def _activity_tab(service: StudioService) -> None:
+    """Merged activity feed and the current user's mentions (spec 32)."""
+    import streamlit as _st  # local alias keeps the import list tidy
+
+    mentions = service.mentions(unseen_only=False)
+    if mentions:
+        st.markdown("#### Mentions of you")
+        unseen = [m for m in mentions if not m["seen"]]
+        if unseen and st.button("Mark all as read"):
+            service.mark_mentions_seen()
+            st.rerun()
+        for mention in mentions[:20]:
+            marker = "●" if not mention["seen"] else "○"
+            st.markdown(
+                f"{marker} **{esc(mention['author_label'])}** on "
+                f"{esc(mention['target_type'])}: {esc(mention['body'][:160])}  \n"
+                f"<span style='color:{PALETTE['muted']};font-size:0.75rem'>"
+                f"{str(mention['created_at'])[:16].replace('T', ' ')}</span>",
+                unsafe_allow_html=True,
+            )
+        st.markdown("---")
+    elif not service.identity.is_dev:
+        st.caption("No mentions yet. Teammates can reach you with @your-name in a comment.")
+
+    product_id = _st.session_state.get("active_product")
+    if not product_id:
+        empty_state("Select a product to see its activity")
+        return
+
+    st.markdown("#### Recent activity")
+    feed = service.activity_feed(product_id)
+    if not feed:
+        empty_state("Nothing has happened yet")
+        return
+
+    for entry in feed[:50]:
+        icon = "💬" if entry["kind"] == "comment" else "•"
+        st.markdown(
+            f"{icon} **{esc(entry['actor'])}** {esc(entry['summary'])}"
+            + (f" — {esc(entry['detail'][:120])}" if entry.get("detail") else "")
+            + f"  \n<span style='color:{PALETTE['muted']};font-size:0.72rem'>"
+            f"{str(entry['at'])[:16].replace('T', ' ')}</span>",
+            unsafe_allow_html=True,
+        )
 
 
 def _audit_tab(service: StudioService) -> None:

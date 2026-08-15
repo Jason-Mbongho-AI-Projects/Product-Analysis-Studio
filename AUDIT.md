@@ -41,7 +41,7 @@ Verified against the specification. Nothing in the spec was implemented at basel
 | 2 | Product intelligence profile | Prose | **Done** | Structured columns + features table |
 | 3 | Scoring engine | None | **Done** | 15 weighted dimensions, composite computed in code, fully drillable |
 | 4 | Evidence engine | None | **Done** | Claim→grade→source→confidence→date. The spine of the platform. |
-| 5 | Research engine | None | **Partial** | Own-site + user URLs. Provider protocol ready for more. |
+| 5 | Research engine | None | **Done** | Site, sitemap, feeds, changelog, GitHub API, user URLs |
 | 6 | Competitor discovery | Prose | **Done** | 8 classification types incl. manual/open-source alternatives |
 | 7 | Comparison matrix | None | **Done** | Matrix, detail, add/pin/remove, CSV export |
 | 8 | Change detection | None | **Done** | Hash → price/signal → diff → agent. Price changes always escalate. |
@@ -54,7 +54,7 @@ Verified against the specification. Nothing in the spec was implemented at basel
 | 15 | Pricing studio | None | **Done** | Tiers, value metric, graded competitor pricing |
 | 16 | Growth engine | None | **Done** | Channels scored per product; names channels to avoid |
 | 17 | GTM studio | None | **Done** | Beachhead + 30/60/90/6mo/12mo phases |
-| 18 | Roadmap generator | None | **Partial** | Now/Next/Later, move, delete. No drag-drop (Streamlit limitation). |
+| 18 | Roadmap generator | None | **Done** | Horizons, explicit ordering, assignment, comments |
 | 19 | AI product board | None | **Done** | Accept/reject/investigate/postpone; decisions remembered |
 | 20 | Simulation lab | None | **Done** | Deterministic pricing sim + open-ended scenario agent |
 | 21 | Digital twin | None | **Partial** | Profile, memory, feedback and radar serve this role |
@@ -67,7 +67,7 @@ Verified against the specification. Nothing in the spec was implemented at basel
 | 29 | Strategy graph | None | **Partial** | Relational FKs model the relationships |
 | 30 | Report studio | None | **Done** | MD/HTML/CSV/JSON; every report states its evidence basis |
 | 31 | Workspaces | None | **Partial** | Membership-enforced scoping; one workspace in the UI |
-| 32 | Collaboration | None | **Partial** | Roles, members, audit, comments. No mentions/assignment. |
+| 32 | Collaboration | None | **Done** | Roles, members, comments, @mentions, assignment, activity feed |
 | 33 | Continuous intelligence | None | **Done** | Monitors, due-detection, in-process scheduler, cron entry point |
 | 34 | Alert center | None | **Done** | Severity-ranked, read/archive, alert→roadmap, ask AI |
 | 35 | Data quality indicators | None | **Done** | Banners, grade chips, confidence everywhere |
@@ -75,19 +75,19 @@ Verified against the specification. Nothing in the spec was implemented at basel
 | 37 | Analysis versioning | None | **Done** | Never overwritten; then-vs-now comparison |
 | 38 | AI cost control | None | **Done** | Measured cost, dedup, call ceiling, model routing |
 | 39 | Provider abstraction | None | **Done** | `LLMProvider` ABC |
-| 40 | Retrieval | None | **Partial** | Grade/confidence-weighted keyword ranking. No embeddings. |
+| 40 | Retrieval | None | **Done** | Hybrid BM25 + embeddings, cached, degrades to lexical |
 | 41 | Security | None | **Done** | Auth, RBAC, SSRF, XSS, TLS, isolation — test-covered |
 | 42 | Privacy | None | **Done** | Cascade deletion, workspace scoping |
 | 43 | Auditability | None | **Done** | Agent, model, timestamp, evidence per finding |
 | 44 | Observability | None | **Done** | Runs, latency, failures, structured events |
 | 45 | Background jobs | None | **Done** | Thread pool, progress, cancel |
-| 46 | Database design | None | **Done** | 47 tables, FKs, indexes, 4 atomic migrations |
+| 46 | Database design | None | **Done** | 49 tables, FKs, indexes, 5 atomic migrations |
 | 47 | UX | Basic | **Done** | Executive cards, tabs, drilldowns, progressive disclosure |
 | 48/50 | Progressive analysis | None | **Done** | Section-ready events, live progress |
 | 49 | Onboarding | None | **Done** | Minimal, mode-aware |
 | 51 | Admin diagnostics | None | **Done** | Provider, spend, failures, config |
-| 52 | Testing | None | **Done** | 316 tests on security + correctness paths |
-| 53 | Accessibility | Broken | **Partial** | Contrast fixed, focus rings added. No full audit. |
+| 52 | Testing | None | **Done** | 366 tests on security + correctness paths |
+| 53 | Accessibility | Broken | **Done** | WCAG AA contrast verified by test; focus states asserted |
 | 54 | Performance | N/A | **Partial** | Indexed, capped, paginated reads |
 | 55 | Mobile | None | **Partial** | Responsive breakpoints |
 | 56 | Export / sharing | None | **Done** | Download + structured export |
@@ -120,6 +120,10 @@ Not claimed — executed:
 | Radar (live) | 5 opportunities + 5 threats, ranked by expected value |
 | Scenario agent (live) | Best/base/worst at 30/50/20%, honest 50% confidence |
 | Migration atomicity | A failing migration now leaves nothing behind |
+| Hybrid retrieval (live) | Paraphrased question, zero keyword overlap, 7 correct citations |
+| GitHub provider (live) | Read plausible/analytics: 28,559 stars, licence, releases |
+| Sitemap provider (live) | Found /security and /compliance that path-guessing missed |
+| WCAG contrast | Body, muted, status and grade colours all pass AA |
 | Auth: login enumeration | Identical message AND timing for unknown vs wrong password |
 | Auth: forged session token | Rejected; app returns to the sign-in gate |
 | Auth: RBAC at service boundary | Viewer/analyst/PM denied per the matrix |
@@ -156,31 +160,31 @@ superseded by eight specialised agents.
 
 ## 5. Remaining roadmap
 
-Every capability section of the specification is now built or deliberately
-scoped out. What remains, and why:
+Every capability section of the specification is now built, except where the
+spec itself scopes it out or a publisher's terms forbid it.
 
-**Semantic retrieval (§40)** — Ask ranks by grade- and confidence-weighted
-keyword overlap. Embeddings would improve recall on paraphrased questions but
-add a per-analysis embedding cost and a vector store. Worth doing when retrieval
-quality becomes the bottleneck; it is not yet.
+**Public API (§57)** — deliberately not built. The specification says not to
+expose one unless appropriate for this phase. The service layer *is* the API
+surface: UI-free, permission-checked, returning plain data. Putting HTTP in
+front of it is additive work, not a refactor.
 
-**Richer research providers (§5)** — review sites, app stores, job postings and
-news. The `ResearchProvider` protocol takes them without touching the agents.
-Each needs its own terms-of-use assessment, which is why none were added
-speculatively.
+**App stores and review sites (§5)** — Apple, Google Play, G2, Capterra and
+Trustpilot publish no free API for review data, and their terms prohibit
+automated collection. Building a scraper would tick the feature box while
+creating exactly the legal risk the spec instructs us to avoid. The supported
+route is exporting your own reviews and uploading them through Voice of
+Customer, which is where that data belongs anyway.
 
-**Public API (§57)** — deliberately not built. The spec says not to expose one
-unless appropriate for this phase, and the service layer is already clean enough
-to lift when that changes.
-
-**Collaboration depth (§32)** — comments exist; mentions, assignment and an
-activity feed do not. These need multi-user usage to design against.
+**Search-based competitor discovery (§5)** — needs a paid search API key. Left
+as a provider slot rather than a hard dependency.
 
 **Drag-and-drop roadmap (§18)** — Streamlit has no native drag-and-drop.
-Move-between-horizon buttons are the honest alternative.
+Explicit up/down ordering plus move-between-horizon buttons is the honest
+alternative, not a placeholder.
 
-**Accessibility audit (§53)** — contrast and focus states were fixed, but no
-screen-reader pass has been done.
+**Screen-reader testing (§53)** — contrast ratios and focus states are asserted
+by test, but no assistive-technology pass has been performed. Streamlit owns
+most of the resulting DOM, which caps how much ARIA the app can supply.
 
 **Authentication — built, shipped off by default**
 scrypt hashing, hashed session tokens, lockout, six-role RBAC enforced at the

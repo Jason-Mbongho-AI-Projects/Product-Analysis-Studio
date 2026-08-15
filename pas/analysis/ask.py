@@ -59,6 +59,7 @@ class Answer:
     citations: list[dict[str, Any]]
     followups: list[str]
     dropped_citations: int = 0
+    retrieval: dict[str, Any] = field(default_factory=dict)
 
 
 def score_evidence(question: str, item: dict[str, Any]) -> float:
@@ -96,6 +97,8 @@ class AskEngine:
         self._config = config
         self._provider = provider
         self._workspace_id = workspace_id
+        #: Populated by the last rank() call so the UI can show how retrieval ran.
+        self.last_retrieval: dict[str, Any] = {}
 
     # -- retrieval ---------------------------------------------------------
 
@@ -193,14 +196,10 @@ class AskEngine:
 
         # Evidence is ranked against the question rather than dumped wholesale.
         all_evidence = repo.list_evidence(conn, analysis_id, limit=400)
-        ranked = sorted(
-            ((score_evidence(question, item), item) for item in all_evidence),
-            key=lambda pair: pair[0],
-            reverse=True,
-        )
-        selected = [item for score, item in ranked if score > 0][:max_evidence]
+        selected = self._rank_evidence(question, all_evidence, analysis_id, max_evidence)
         if not selected:
-            # Nothing matched the wording; fall back to the strongest evidence.
+            # Nothing matched at all; fall back to the strongest evidence so the
+            # answer still has something concrete to work from.
             selected = sorted(
                 all_evidence,
                 key=lambda e: (e["grade"] == "verified_fact", e["confidence"]),
@@ -223,6 +222,52 @@ class AskEngine:
             )
 
         return context
+
+    def _rank_evidence(
+        self,
+        question: str,
+        evidence: list[dict[str, Any]],
+        analysis_id: str,
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        """Rank with hybrid retrieval, degrading to keyword-only on failure."""
+        if not evidence:
+            return []
+
+        try:
+            from .retrieval import HybridRetriever
+
+            retriever = HybridRetriever(
+                self._conn,
+                config=self._config,
+                provider=self._provider,
+                workspace_id=self._workspace_id,
+            )
+            ranked = retriever.rank(
+                question, evidence, limit=limit, analysis_id=analysis_id
+            )
+            self.last_retrieval = {
+                "mode": "hybrid",
+                "considered": len(evidence),
+                "selected": len(ranked),
+                "top_semantic": max((r.semantic for r in ranked), default=0.0),
+            }
+            return [entry.item for entry in ranked]
+        except Exception:
+            # Retrieval quality is a nice-to-have; answering at all is not.
+            ranked_pairs = sorted(
+                ((score_evidence(question, item), item) for item in evidence),
+                key=lambda pair: pair[0],
+                reverse=True,
+            )
+            selected = [item for score, item in ranked_pairs if score > 0][:limit]
+            self.last_retrieval = {
+                "mode": "lexical",
+                "considered": len(evidence),
+                "selected": len(selected),
+                "top_semantic": 0.0,
+            }
+            return selected
 
     @staticmethod
     def _strategy_block(label: str, data: dict[str, Any] | None) -> str:
@@ -317,6 +362,7 @@ class AskEngine:
             citations=citations,
             followups=result.followup_questions,
             dropped_citations=dropped,
+            retrieval=dict(self.last_retrieval),
         )
 
     @staticmethod

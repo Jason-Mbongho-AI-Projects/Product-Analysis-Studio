@@ -836,6 +836,8 @@ def render_board(service: StudioService, data: dict[str, Any]) -> None:
                 service.decide(rec["id"], DecisionState.POSTPONED.value)
                 st.rerun()
 
+            _comment_thread(service, rec["product_id"], "recommendation", rec["id"])
+
     st.caption(
         "Rejected recommendations are remembered. Future analyses of this product "
         "will not resurface them as pending unless new evidence changes the picture."
@@ -878,7 +880,27 @@ def render_roadmap(service: StudioService, product: dict) -> None:
                     st.markdown(f"**{esc(item['title'])}**")
                     if item.get("detail"):
                         st.caption(item["detail"][:180])
-                    st.caption(f"Effort {item['effort'].upper()} · {item['status']}")
+                    owner = item.get("assignee_label") or "unassigned"
+                    st.caption(
+                        f"Effort {item['effort'].upper()} · {item['status']} · {owner}"
+                    )
+
+                    # Streamlit has no native drag-and-drop, so ordering within a
+                    # horizon is explicit.
+                    order_cols = st.columns(2)
+                    if order_cols[0].button(
+                        "↑", key=f"up_{item['id']}", use_container_width=True,
+                        help="Move up",
+                    ):
+                        service.reorder_roadmap_item(item["id"], -1)
+                        st.rerun()
+                    if order_cols[1].button(
+                        "↓", key=f"down_{item['id']}", use_container_width=True,
+                        help="Move down",
+                    ):
+                        service.reorder_roadmap_item(item["id"], 1)
+                        st.rerun()
+
                     move_cols = st.columns(3)
                     targets = [h for h in ["now", "next", "later"] if h != horizon]
                     for move_col, target in zip(move_cols, targets):
@@ -893,6 +915,72 @@ def render_roadmap(service: StudioService, product: dict) -> None:
                     ):
                         service.delete_roadmap_item(item["id"])
                         st.rerun()
+
+                    _assignment_control(service, item)
+                    _comment_thread(service, product["id"], "roadmap_item", item["id"])
+
+
+def _assignment_control(service: StudioService, item: dict[str, Any]) -> None:
+    """Assign a roadmap item to a workspace member (spec 32)."""
+    members = service.auth.members(service.workspace_id)
+    if not members:
+        return
+
+    options = [""] + [m["id"] for m in members]
+    labels = {"": "Unassigned", **{m["id"]: (m["name"] or m["email"]) for m in members}}
+    current = item.get("assignee_id") or ""
+    if current not in labels:
+        current = ""
+
+    chosen = st.selectbox(
+        "Owner",
+        options,
+        index=options.index(current),
+        format_func=lambda key: labels[key],
+        key=f"assign_{item['id']}",
+        label_visibility="collapsed",
+    )
+    if chosen != current:
+        service.assign_roadmap_item(item["id"], chosen or None, labels[chosen])
+        st.rerun()
+
+
+def _comment_thread(
+    service: StudioService, product_id: str, target_type: str, target_id: str
+) -> None:
+    """A discussion thread attached to any object (spec 32)."""
+    comments = service.comments(target_type, target_id)
+    open_count = len([c for c in comments if not c["resolved"]])
+
+    with st.expander(f"Discussion ({open_count})" if open_count else "Discussion"):
+        for comment in comments:
+            style = "opacity:0.55;" if comment["resolved"] else ""
+            st.markdown(
+                f"<div style='{style}border-left:2px solid {PALETTE['line']};"
+                f"padding-left:0.6rem;margin-bottom:0.5rem'>"
+                f"<strong>{esc(comment['author_label'])}</strong> "
+                f"<span style='color:{PALETTE['muted']};font-size:0.72rem'>"
+                f"{str(comment['created_at'])[:16].replace('T', ' ')}</span><br>"
+                f"{esc(comment['body'])}</div>",
+                unsafe_allow_html=True,
+            )
+            if not comment["resolved"] and st.button(
+                "Resolve", key=f"res_{comment['id']}"
+            ):
+                service.resolve_comment(comment["id"])
+                st.rerun()
+
+        with st.form(f"comment_{target_id}", clear_on_submit=True):
+            body = st.text_area(
+                "Comment", height=68, label_visibility="collapsed",
+                placeholder="Add a note. Use @name to mention a teammate.",
+            )
+            if st.form_submit_button("Post"):
+                try:
+                    service.add_comment(product_id, target_type, target_id, body)
+                    st.rerun()
+                except ValueError as exc:
+                    st.error(str(exc))
 
 
 def _tab_evidence(service: StudioService, analysis_id: str) -> None:

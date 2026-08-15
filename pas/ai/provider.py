@@ -73,6 +73,10 @@ class LLMProvider(ABC):
         """Return an instance of ``schema`` validated from the model response."""
 
     @abstractmethod
+    def embed(self, *, model: str, texts: list[str]) -> tuple[list[list[float]], Usage]:
+        """Return one embedding vector per input text, plus usage."""
+
+    @abstractmethod
     def complete_text(
         self,
         *,
@@ -192,6 +196,31 @@ class OpenRouterProvider(LLMProvider):
         raise ProviderError(
             f"{model} failed after {self._max_retries + 1} attempts: {last_error}"
         ) from last_error
+
+    def embed(self, *, model: str, texts: list[str]) -> tuple[list[list[float]], Usage]:
+        """Embed a batch of texts.
+
+        Batching matters: one request per claim would be dominated by round-trip
+        latency rather than compute.
+        """
+        if not texts:
+            return [], Usage(provider=self.name, model=model)
+
+        started = time.monotonic()
+        response = self._client.embeddings.create(model=model, input=texts)
+        latency = int((time.monotonic() - started) * 1000)
+
+        vectors = [item.embedding for item in sorted(response.data, key=lambda d: d.index)]
+        raw_usage = getattr(response, "usage", None)
+        usage = Usage(
+            provider=self.name,
+            model=model,
+            prompt_tokens=getattr(raw_usage, "prompt_tokens", 0) or 0,
+            total_tokens=getattr(raw_usage, "total_tokens", 0) or 0,
+            cost_usd=float(getattr(raw_usage, "cost", 0.0) or 0.0),
+            latency_ms=latency,
+        )
+        return vectors, usage
 
     def complete_text(
         self,

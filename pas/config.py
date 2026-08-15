@@ -26,6 +26,11 @@ OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 FAST_MODEL = os.getenv("PAS_FAST_MODEL", "openai/gpt-4.1-mini")
 DEEP_MODEL = os.getenv("PAS_DEEP_MODEL", "openai/gpt-4.1-mini")
 
+# Semantic retrieval (spec 40). Embeddings are cached by content hash, so the
+# cost is paid once per claim rather than per question.
+EMBEDDING_MODEL = os.getenv("PAS_EMBEDDING_MODEL", "openai/text-embedding-3-small")
+EMBEDDINGS_ENABLED = os.getenv("PAS_EMBEDDINGS", "true").lower() in {"1", "true", "yes", "on"}
+
 # Research fetching limits. Kept conservative on purpose - this product fetches
 # third-party sites and must behave itself.
 HTTP_TIMEOUT_SECONDS = float(os.getenv("PAS_HTTP_TIMEOUT", "12"))
@@ -77,6 +82,8 @@ class AppConfig:
     auth_enabled: bool = AUTH_ENABLED
     allow_signup: bool = ALLOW_SELF_SIGNUP
     scheduler_enabled: bool = SCHEDULER_ENABLED
+    embeddings_enabled: bool = EMBEDDINGS_ENABLED
+    embedding_model: str = EMBEDDING_MODEL
     default_role: str = DEFAULT_MEMBER_ROLE
     allowed_schemes: tuple[str, ...] = field(default=("http", "https"))
 
@@ -101,6 +108,8 @@ def load_config() -> AppConfig:
         auth_enabled=AUTH_ENABLED,
         allow_signup=ALLOW_SELF_SIGNUP,
         scheduler_enabled=SCHEDULER_ENABLED,
+        embeddings_enabled=EMBEDDINGS_ENABLED,
+        embedding_model=EMBEDDING_MODEL,
         default_role=DEFAULT_MEMBER_ROLE,
     )
 

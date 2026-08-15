@@ -161,6 +161,7 @@ class StudioService:
         *,
         mode: str = "founder",
         research_enabled: bool = True,
+        deep_research: bool = False,
         extra_urls: list[str] | None = None,
     ) -> tuple[str, JobState]:
         """Create an analysis version and run it on a background worker."""
@@ -197,6 +198,7 @@ class StudioService:
             analysis_id=analysis_id,
             mode=mode,
             research_enabled=research_enabled,
+            deep_research=deep_research,
             extra_urls=safe_urls,
         )
 
@@ -807,7 +809,7 @@ class StudioService:
             raise ValueError("Write something first.")
         from .storage import voc_repo
 
-        return voc_repo.add_comment(
+        comment_id = voc_repo.add_comment(
             self.conn,
             workspace_id=self.workspace_id,
             product_id=product_id,
@@ -817,6 +819,13 @@ class StudioService:
             target_id=target_id,
             body=body,
         )
+        voc_repo.record_mentions(
+            self.conn,
+            workspace_id=self.workspace_id,
+            comment_id=comment_id,
+            body=body,
+        )
+        return comment_id
 
     def comments(self, target_type: str, target_id: str) -> list[dict[str, Any]]:
         from .storage import voc_repo
@@ -833,6 +842,54 @@ class StudioService:
         from .storage import voc_repo
 
         voc_repo.resolve_comment(self.conn, comment_id)
+
+    def mentions(self, unseen_only: bool = True) -> list[dict[str, Any]]:
+        """@mentions addressed to the current identity (spec 32)."""
+        if self.identity.is_dev:
+            return []
+        from .storage import voc_repo
+
+        return voc_repo.list_mentions(self.conn, self.identity.user_id, unseen_only)
+
+    def mark_mentions_seen(self) -> None:
+        if self.identity.is_dev:
+            return
+        from .storage import voc_repo
+
+        voc_repo.mark_mentions_seen(self.conn, self.identity.user_id)
+
+    def assign_roadmap_item(self, item_id: str, user_id: str | None, label: str) -> None:
+        self.require(Permission.MANAGE_ROADMAP)
+        from .storage import voc_repo
+
+        voc_repo.assign_roadmap_item(self.conn, item_id, user_id, label)
+        self._audit("roadmap.assigned", target_type="roadmap_item", target_id=item_id,
+                    detail=label)
+
+    def reorder_roadmap_item(self, item_id: str, direction: int) -> None:
+        """Move an item up (-1) or down (+1) within its horizon."""
+        self.require(Permission.MANAGE_ROADMAP)
+        from .storage import voc_repo
+
+        voc_repo.reorder_roadmap_item(self.conn, item_id, direction)
+
+    def activity_feed(self, product_id: str) -> list[dict[str, Any]]:
+        self.require(Permission.VIEW)
+        from .storage import voc_repo
+
+        return voc_repo.activity_feed(self.conn, product_id)
+
+    def retrieval_stats(self) -> dict[str, Any]:
+        """Embedding cache status for diagnostics (spec 40)."""
+        from .analysis.retrieval import HybridRetriever
+
+        if not self.config.is_configured:
+            return {"enabled": self.config.embeddings_enabled, "cached_vectors": 0,
+                    "cache_bytes": 0, "model": self.config.embedding_model}
+        return HybridRetriever(
+            self.conn, config=self.config, provider=self._provider(),
+            workspace_id=self.workspace_id,
+        ).stats()
 
     # -- competitor management (spec 7) -----------------------------------
 

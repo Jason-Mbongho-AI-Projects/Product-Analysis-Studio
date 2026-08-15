@@ -112,6 +112,15 @@ def _render_new_analysis(service: StudioService) -> None:
                     "Without this the analysis relies on model knowledge alone."
                 ),
             )
+            deep_research = st.toggle(
+                "Deep research",
+                value=False,
+                help=(
+                    "Also read the site's sitemap, changelog and RSS feed, and "
+                    "public GitHub metadata if the product is open source. "
+                    "Slower and costs more, but finds pages path-guessing misses."
+                ),
+            )
             extra = st.text_area(
                 "Additional source URLs (one per line, optional)",
                 placeholder="https://competitor.com/pricing",
@@ -137,6 +146,7 @@ def _render_new_analysis(service: StudioService) -> None:
             product_id,
             mode=mode,
             research_enabled=research_enabled,
+            deep_research=deep_research,
             extra_urls=[line for line in (extra or "").splitlines() if line.strip()],
         )
     except ValueError as exc:

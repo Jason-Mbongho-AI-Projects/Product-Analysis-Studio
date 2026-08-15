@@ -32,6 +32,7 @@ class AnalysisRequest:
     mode: str = "founder"
     research_enabled: bool = True
     depth: str = "full"
+    deep_research: bool = False
     extra_urls: list[str] = field(default_factory=list)
 
 
@@ -179,6 +180,18 @@ class AnalysisOrchestrator:
         providers: list[Any] = []
         if seed:
             providers.append(SiteProvider())
+            if request.deep_research:
+                # Sitemap and feed discovery find pages that guessing the usual
+                # paths misses - /security and /compliance in particular.
+                from ..research.providers import (
+                    ChangelogProvider,
+                    FeedProvider,
+                    SitemapProvider,
+                )
+
+                providers.extend(
+                    [SitemapProvider(), ChangelogProvider(), FeedProvider()]
+                )
         if request.extra_urls:
             providers.append(UserSourceProvider(request.extra_urls))
 
@@ -204,9 +217,54 @@ class AnalysisOrchestrator:
         finally:
             engine.close()
 
+        github = self._fetch_github(conn, request, product, notify)
+        if github:
+            pages.append(github)
+
         notify(
             "research_done",
             f"{len(pages)} sources retrieved, {len(failures)} unavailable",
             {"pages": len(pages), "failures": len(failures)},
         )
         return ResearchBundle(pages=pages, failures=failures)
+
+    def _fetch_github(
+        self,
+        conn,
+        request: AnalysisRequest,
+        product: dict[str, Any],
+        notify: Callable[..., None],
+    ) -> dict[str, Any] | None:
+        """Enrich with public GitHub metadata when the product is open source."""
+        from ..research.providers import GitHubProvider
+
+        candidates = [product.get("source_url") or "", *request.extra_urls]
+        for candidate in candidates:
+            summary = GitHubProvider().fetch_repository(candidate)
+            if summary is None:
+                continue
+
+            notify("research_github", f"Read GitHub repository {summary['slug']}")
+            source_id = repo.upsert_source(
+                conn,
+                workspace_id=request.workspace_id,
+                analysis_id=request.analysis_id,
+                url=str(summary.get("url") or candidate),
+                title=f"GitHub: {summary['slug']}",
+                source_type="github",
+                fetched_at=repo.utcnow(),
+                status="active",
+                reliability=0.9,
+                excerpt=str(summary.get("description") or "")[:2000],
+            )
+            conn.commit()
+            return {
+                "source_id": source_id,
+                "url": str(summary.get("url") or candidate),
+                "title": f"GitHub: {summary['slug']}",
+                "source_type": "github",
+                "text": GitHubProvider.as_text(summary),
+                "ok": True,
+                "error": None,
+            }
+        return None

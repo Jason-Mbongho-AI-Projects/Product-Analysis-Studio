@@ -45,6 +45,15 @@ class StubProvider(LLMProvider):
     def complete_text(self, *, model, system, user, max_tokens=4000, temperature=None):
         return Completion(data="text", raw="text", usage=Usage(provider="stub", model=model))
 
+    def embed(self, *, model, texts):
+        # Deterministic pseudo-embeddings: enough to exercise the ranking path
+        # without a network call.
+        vectors = [
+            [float(len(text) % 7), float(text.count("a")), float(text.count("e"))]
+            for text in texts
+        ]
+        return vectors, Usage(provider="stub", model=model, total_tokens=len(texts))
+
 
 # ---------------------------------------------------------------------------
 # Schema contracts

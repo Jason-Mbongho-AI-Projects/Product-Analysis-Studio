@@ -34,7 +34,7 @@ verified fact.
 | **Voice of Customer** | Reviews, interviews and tickets clustered into themes, with verbatim quotes checked against your own data |
 | **Opportunity & threat radar** | Signals ranked by expected value (impact x probability) |
 | **Scenario lab** | Open-ended what-ifs across best / base / worst cases |
-| **Ask** | Questions answered from stored intelligence, with verified citations |
+| **Ask** | Hybrid BM25 + embedding retrieval over the evidence ledger, with verified citations |
 | **Monitoring & alerts** | Competitor change detection with a severity-ranked alert centre |
 | **Report studio** | Markdown / HTML / CSV / JSON exports that carry their evidence basis |
 | **Evidence ledger** | Every claim, its grade, confidence, agent and citations |
@@ -59,6 +59,7 @@ pas/
 │   ├── safety.py         SSRF guard (the security boundary)
 │   ├── fetcher.py        Polite, size-capped, redirect-revalidating fetcher
 │   ├── documents.py      Upload parsing (CSV/TSV/JSON/TXT/PDF)
+│   ├── providers.py      GitHub API, RSS/Atom, sitemap, changelog
 │   └── engine.py         Provider-based research orchestration
 ├── agents/
 │   ├── base.py           Agent ABC: contracts, retry, observability, budget
@@ -70,7 +71,8 @@ pas/
 ├── analysis/
 │   ├── finance.py        Deterministic unit economics + elasticity model
 │   ├── monitoring.py     Change detection and alert generation
-│   ├── ask.py            Retrieval + citation verification
+│   ├── ask.py            Question answering + citation verification
+│   ├── retrieval.py      Hybrid BM25 + embedding ranking
 │   └── reports.py        Report builders and format conversion
 ├── storage/
 │   ├── db.py             sqlite connection + migration runner
@@ -186,6 +188,8 @@ streamlit run app.py
 | `PAS_DEFAULT_ROLE` | `viewer` | Role for accounts after the first (which becomes owner). |
 | `PAS_SCHEDULER` | `false` | Run due monitors automatically while the app is open. |
 | `PAS_SCHEDULER_TICK` | `300` | Seconds between scheduler checks. |
+| `PAS_EMBEDDINGS` | `true` | Semantic retrieval for Ask. Cached per claim. |
+| `PAS_EMBEDDING_MODEL` | `openai/text-embedding-3-small` | Embedding model. |
 | `PAS_FAST_MODEL` | `openai/gpt-4.1-mini` | Model for mechanical tasks |
 | `PAS_DEEP_MODEL` | `openai/gpt-4.1-mini` | Model for reasoning-heavy agents |
 | `PAS_DATA_DIR` | `./data` | SQLite location |
@@ -232,6 +236,45 @@ Coverage focuses on the paths where failure is expensive:
 | **Tenant isolation** | Every table carries `workspace_id`; every read is scoped. A valid session grants nothing in a workspace the user is not a member of. |
 | **Audit** | Every state change records actor, action, target and time. Audit writes are best-effort and can never roll back the operation they describe. |
 | **Deletion** | Deleting a product cascades to all derived intelligence via foreign keys. |
+
+---
+
+## Retrieval
+
+Ask ranks evidence with two complementary signals:
+
+* **BM25** over claim text, which catches exact terminology — product names,
+  "SOC 2", "SAML" — that embeddings blur together.
+* **Cosine similarity** over embeddings, which catches paraphrase. Asking "who
+  might eat our lunch" retrieves competitive-threat claims sharing no keywords
+  with the question.
+
+Scores are normalised, blended, then weighted by evidence grade and confidence,
+so a verified fact outranks a hypothesis of equal textual relevance. Embeddings
+are cached by content hash — a claim is embedded once regardless of how many
+questions reference it — and a provider failure degrades to lexical-only rather
+than breaking search.
+
+---
+
+## Research sources
+
+Each source uses an access route the publisher offers deliberately:
+
+| Source | Route |
+|---|---|
+| Product site | Direct fetch, robots.txt honoured |
+| Site structure | `sitemap.xml`, discovered via `robots.txt` |
+| Release notes | RSS/Atom feeds and conventional changelog paths |
+| Open-source repos | The documented public GitHub REST API |
+| Your own documents | Upload |
+
+Enable the extra sources with the **Deep research** toggle on intake.
+
+**Not included, deliberately:** app stores and review sites publish no free
+review API and their terms prohibit scraping. Export your own data and upload it
+through Voice of Customer. Building a scraper would have satisfied the feature
+list while creating exactly the legal risk the spec says to avoid.
 
 ---
 
@@ -335,12 +378,16 @@ Honest scope statement — see `AUDIT.md` for the full roadmap:
   directly from the Members tab; doing so revokes that account's sessions.
 - The scheduler runs only while the app process is alive. For unattended
   monitoring, point cron at `StudioService.run_due_monitors()`.
-- Retrieval for Ask ranks by grade- and confidence-weighted keyword overlap.
-  Embeddings would improve recall on paraphrased questions.
-- No public API. The service layer is clean enough to expose one, but the spec
-  scoped that out of this phase.
-- Research covers your own site and URLs you supply. Review sites, app stores,
-  news and job postings are designed for but not implemented.
+- **No public API.** The service layer is the API surface — UI-free and
+  permission-checked — but nothing is exposed over HTTP. The spec scoped that
+  out of this phase.
+- **App stores and review sites are not scraped.** They offer no free review
+  API and prohibit automated collection. Export your reviews and upload them
+  through Voice of Customer instead.
+- Search-based competitor discovery needs a paid search API key.
+- No drag-and-drop roadmap; Streamlit has none. Ordering is explicit buttons.
+- Contrast and focus states are test-verified, but no screen-reader pass has
+  been done.
 
 ---
 

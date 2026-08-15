@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from typing import Any, Sequence
 
@@ -439,3 +440,193 @@ def resolve_comment(conn: sqlite3.Connection, comment_id: str, resolved: bool = 
 def delete_comment(conn: sqlite3.Connection, comment_id: str) -> None:
     conn.execute("DELETE FROM comments WHERE id = ?", (comment_id,))
     conn.commit()
+
+
+# ---------------------------------------------------------------------------
+# Mentions, assignment and activity (spec 32)
+# ---------------------------------------------------------------------------
+
+#: The negative lookbehind stops an email address being read as a mention:
+#: "email a@b.com" must not produce a mention of "b.com". Trailing punctuation
+#: is excluded so "@alice." resolves to "alice".
+MENTION_PATTERN = re.compile(r"(?<![A-Za-z0-9._%+-])@([A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*)")
+
+
+def extract_mentions(body: str) -> list[str]:
+    """Pull @handles out of a comment body, ignoring email addresses."""
+    return list(
+        dict.fromkeys(
+            handle.rstrip(".")
+            for handle in MENTION_PATTERN.findall(body or "")
+            if len(handle.rstrip(".")) >= 2
+        )
+    )
+
+
+def record_mentions(
+    conn: sqlite3.Connection,
+    *,
+    workspace_id: str,
+    comment_id: str,
+    body: str,
+) -> list[str]:
+    """Resolve @handles against workspace members and store the matches.
+
+    A handle is matched against the email local-part or the display name, so
+    both "@alice" and "@alice.smith" find alice.smith@example.com. Unresolved
+    handles are ignored rather than stored, so a typo does not create a
+    notification nobody can act on.
+    """
+    handles = extract_mentions(body)
+    if not handles:
+        return []
+
+    members = _rows(
+        conn.execute(
+            "SELECT u.id, u.email, u.name FROM workspace_members m"
+            " JOIN users u ON u.id = m.user_id WHERE m.workspace_id = ?",
+            (workspace_id,),
+        )
+    )
+    lookup: dict[str, str] = {}
+    for member in members:
+        local = (member["email"] or "").split("@")[0].lower()
+        if local:
+            lookup[local] = member["id"]
+        name = (member["name"] or "").lower().replace(" ", ".")
+        if name:
+            lookup.setdefault(name, member["id"])
+
+    matched: list[str] = []
+    for handle in handles:
+        user_id = lookup.get(handle.lower())
+        if user_id is None:
+            continue
+        conn.execute(
+            "INSERT INTO mentions (id, workspace_id, comment_id, user_id, handle,"
+            " seen, created_at) VALUES (?,?,?,?,?,0,?)",
+            (new_id("mnt"), workspace_id, comment_id, user_id, handle, utcnow()),
+        )
+        matched.append(handle)
+    conn.commit()
+    return matched
+
+
+def list_mentions(
+    conn: sqlite3.Connection, user_id: str, unseen_only: bool = True
+) -> list[dict[str, Any]]:
+    clause = " AND m.seen = 0" if unseen_only else ""
+    return _rows(
+        conn.execute(
+            f"""
+            SELECT m.id, m.handle, m.seen, m.created_at, c.body, c.target_type,
+                   c.target_id, c.author_label, c.product_id
+            FROM mentions m JOIN comments c ON c.id = m.comment_id
+            WHERE m.user_id = ?{clause}
+            ORDER BY m.created_at DESC LIMIT 100
+            """,
+            (user_id,),
+        )
+    )
+
+
+def mark_mentions_seen(conn: sqlite3.Connection, user_id: str) -> None:
+    conn.execute("UPDATE mentions SET seen = 1 WHERE user_id = ?", (user_id,))
+    conn.commit()
+
+
+def assign_roadmap_item(
+    conn: sqlite3.Connection, item_id: str, user_id: str | None, label: str
+) -> None:
+    if user_id and not conn.execute(
+        "SELECT 1 FROM users WHERE id = ? LIMIT 1", (user_id,)
+    ).fetchone():
+        user_id = None
+    conn.execute(
+        "UPDATE roadmap_items SET assignee_id = ?, assignee_label = ? WHERE id = ?",
+        (user_id, label, item_id),
+    )
+    conn.commit()
+
+
+def reorder_roadmap_item(conn: sqlite3.Connection, item_id: str, direction: int) -> None:
+    """Move an item up or down within its horizon.
+
+    Streamlit has no native drag-and-drop, so ordering is explicit. Positions are
+    swapped with the adjacent item rather than renumbered, which keeps the
+    operation a single pair of updates.
+    """
+    row = conn.execute(
+        "SELECT product_id, horizon, position FROM roadmap_items WHERE id = ?", (item_id,)
+    ).fetchone()
+    if row is None:
+        return
+
+    comparison = "<" if direction < 0 else ">"
+    order = "DESC" if direction < 0 else "ASC"
+    neighbour = conn.execute(
+        f"SELECT id, position FROM roadmap_items WHERE product_id = ? AND horizon = ?"
+        f" AND position {comparison} ? ORDER BY position {order} LIMIT 1",
+        (row["product_id"], row["horizon"], row["position"]),
+    ).fetchone()
+    if neighbour is None:
+        return
+
+    conn.execute(
+        "UPDATE roadmap_items SET position = ? WHERE id = ?",
+        (neighbour["position"], item_id),
+    )
+    conn.execute(
+        "UPDATE roadmap_items SET position = ? WHERE id = ?",
+        (row["position"], neighbour["id"]),
+    )
+    conn.commit()
+
+
+def activity_feed(
+    conn: sqlite3.Connection, product_id: str, limit: int = 60
+) -> list[dict[str, Any]]:
+    """Merge audit entries and comments into one chronological feed (spec 32)."""
+    audit = _rows(
+        conn.execute(
+            """
+            SELECT created_at, actor_label, action, target_type, target_id, detail
+            FROM audit_log
+            WHERE target_id = ? OR detail LIKE ? OR target_type IN
+                  ('product', 'analysis', 'recommendation', 'competitor', 'source')
+            ORDER BY created_at DESC LIMIT ?
+            """,
+            (product_id, f"%{product_id}%", limit),
+        )
+    )
+    entries = [
+        {
+            "kind": "audit",
+            "at": row["created_at"],
+            "actor": row["actor_label"],
+            "summary": row["action"].replace(".", " ").replace("_", " "),
+            "detail": row["detail"],
+        }
+        for row in audit
+    ]
+
+    comments = _rows(
+        conn.execute(
+            "SELECT created_at, author_label, body, target_type FROM comments"
+            " WHERE product_id = ? ORDER BY created_at DESC LIMIT ?",
+            (product_id, limit),
+        )
+    )
+    entries += [
+        {
+            "kind": "comment",
+            "at": row["created_at"],
+            "actor": row["author_label"],
+            "summary": f"commented on {row['target_type']}",
+            "detail": row["body"][:200],
+        }
+        for row in comments
+    ]
+
+    entries.sort(key=lambda e: e["at"], reverse=True)
+    return entries[:limit]
