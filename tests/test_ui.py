@@ -446,7 +446,7 @@ def test_account_page_renders_in_open_mode(app):
     at.run()
     _assert_clean(at)
     rendered = " ".join(str(m.value) for m in at.markdown)
-    assert "Account & access" in rendered
+    assert "Account and access" in rendered
 
 
 # ---------------------------------------------------------------------------

@@ -7,7 +7,7 @@ import streamlit as st
 
 from ...domain.enums import AlertSeverity, AlertStatus
 from ...service import StudioService
-from ..components import chip, empty_state, esc, kpi
+from ..components import chip, empty_state, esc, kpi, lead, page_header
 from ..theme import PALETTE
 
 SEVERITY_COLOURS = {
@@ -28,12 +28,27 @@ INTERVALS = {
 
 
 def render(service: StudioService, product: dict, analysis_id: str | None) -> None:
+    page_header(
+        "Alerts",
+        "Competitor changes worth acting on. Pages are re-checked on a schedule and "
+        "only genuine changes are analysed, so routine checks cost nothing.",
+    )
+
     tabs = st.tabs(["Alert centre", "Monitors", "Change history"])
     with tabs[0]:
+        lead(
+            "Changes serious enough to need a decision, most severe first. Turn any "
+            "of them into a roadmap item, or ask the AI whether it is a real threat."
+        )
         _alert_centre(service, product)
     with tabs[1]:
+        lead(
+            "Pages to watch. Pricing and feature pages carry the most signal. The "
+            "first run establishes a baseline; changes are detected from then on."
+        )
         _monitors(service, product, analysis_id)
     with tabs[2]:
+        lead("Everything detected so far, including changes too minor to alert on.")
         _changes(service, product)
 
 

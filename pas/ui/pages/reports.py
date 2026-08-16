@@ -10,12 +10,16 @@ import streamlit as st
 
 from ...analysis import reports as report_lib
 from ...service import StudioService
-from ..components import empty_state, esc
+from ..components import empty_state, esc, page_header
 from ..theme import PALETTE
 
 
 def render(service: StudioService, product: dict, analysis_id: str | None) -> None:
-    st.markdown("### Report studio")
+    page_header(
+        "Reports",
+        "Share the findings. Every report states how well-evidenced it is, so a "
+        "reader can judge how much weight to put on it.",
+    )
 
     if not analysis_id:
         empty_state("Run an analysis first", "Reports are built from analysis output.")

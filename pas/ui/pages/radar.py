@@ -9,7 +9,7 @@ import streamlit as st
 
 from ...domain.enums import TimeHorizon
 from ...service import StudioService
-from ..components import chip, empty_state, esc, kpi, meter
+from ..components import chip, empty_state, esc, kpi, lead, meter, page_header
 from ..theme import PALETTE, score_colour
 
 SUGGESTED_SCENARIOS = [
@@ -24,12 +24,32 @@ SUGGESTED_SCENARIOS = [
 
 
 def render(service: StudioService, product: dict, analysis_id: str | None) -> None:
+    page_header(
+        "Radar",
+        "What is coming rather than what is true today - ranked opportunities and "
+        "threats, plus a lab for modelling what-if decisions before you make them.",
+    )
+
     tabs = st.tabs(["Opportunity radar", "Threat radar", "Scenario lab"])
     with tabs[0]:
+        lead(
+            "Where the upside is. Ranked by expected value (impact x probability), so "
+            "a large but unlikely prize does not outrank a modest certain one."
+        )
         _radar(service, analysis_id, "opportunities", "opportunity")
     with tabs[1]:
+        lead(
+            "What could go wrong, ranked the same way. Impact and probability are "
+            "scored separately so you can tell a catastrophe-if-it-happens from a "
+            "near-certainty."
+        )
         _radar(service, analysis_id, "threats", "threat")
     with tabs[2]:
+        lead(
+            "Ask what happens if something changes - a price rise, a competitor move, "
+            "a new segment. Returns best, base and worst cases with the assumptions "
+            "each rests on. These are projections, not predictions."
+        )
         _scenarios(service, product, analysis_id)
 
 

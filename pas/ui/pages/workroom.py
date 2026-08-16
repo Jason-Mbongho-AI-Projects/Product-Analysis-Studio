@@ -24,6 +24,7 @@ from ...domain.enums import (
 from ...service import StudioService
 from ..components import (
     citation_links,
+    lead,
     claim_list,
     confidence_banner,
     confidence_chip,
@@ -98,22 +99,60 @@ def render(service: StudioService) -> None:
         ]
     )
     with tabs[0]:
+        lead(
+            "The answer first: overall score, the highest-priority actions, and how "
+            "the product scores across every dimension. Start here."
+        )
         _tab_executive(data, analysis.get("mode", "founder"))
     with tabs[1]:
+        lead(
+            "What the product actually is - capabilities, features and SWOT. Each "
+            "claim carries a grade showing whether it came from a real source or "
+            "from the model's own reasoning."
+        )
         _tab_product(service, analysis_id, data)
     with tabs[2]:
+        lead(
+            "Who you are up against, including substitutes and the manual workaround "
+            "customers use today. Add anyone the discovery agent missed."
+        )
         _tab_competitors(data, service, analysis_id)
     with tabs[3]:
+        lead(
+            "Market conditions and sizing. Every TAM/SAM/SOM figure shows its formula "
+            "and inputs - these are derived estimates, not measured market data."
+        )
         _tab_market(service, analysis_id, data)
     with tabs[4]:
+        lead(
+            "Who buys and who uses. Unless you supplied real customer research, "
+            "these personas are hypotheses and are labelled as such."
+        )
         _tab_customers(data)
     with tabs[5]:
+        lead(
+            "The score broken into 15 weighted dimensions. The headline number is "
+            "arithmetic over these, not a figure the model invented - open any "
+            "dimension to see why it scored what it did."
+        )
         _tab_scores(data)
     with tabs[6]:
+        lead(
+            "Every claim behind this analysis, with its grade, confidence and "
+            "sources. Filter by grade to separate verified facts from inference."
+        )
         _tab_evidence(service, analysis_id)
     with tabs[7]:
+        lead(
+            "Which pages were read, which refused access, and how many findings each "
+            "one supports. Disable a source you do not trust."
+        )
         _tab_sources(service, data)
     with tabs[8]:
+        lead(
+            "What this analysis cost, which agent produced what, and how long each "
+            "took. Every recommendation is traceable to the agent that made it."
+        )
         _tab_audit(service, product, data)
 
 
@@ -384,7 +423,7 @@ def _tab_executive(data: dict[str, Any], mode: str = "founder") -> None:
                     for s in scores
                 ]
             ).set_index("Dimension")
-            st.bar_chart(frame, height=420, color=PALETTE["primary_2"])
+            st.bar_chart(frame, height=420, color=PALETTE["primary"])
             st.caption(
                 "Inverted dimensions (competitive pressure, acquisition difficulty, "
                 "implementation complexity) are shown flipped so higher is always better."

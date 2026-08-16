@@ -11,12 +11,16 @@ import streamlit as st
 
 from ...analysis.ask import SUGGESTED_QUESTIONS
 from ...service import StudioService
-from ..components import citation_links, empty_state, esc, grade_chip
+from ..components import citation_links, empty_state, esc, grade_chip, page_header
 from ..theme import PALETTE, confidence_label
 
 
 def render(service: StudioService, product: dict, analysis_id: str | None) -> None:
-    st.markdown("### Ask about this product")
+    page_header(
+        "Ask",
+        "Question everything the platform has established about your product. "
+        "Answers come only from stored intelligence and cite the evidence they used.",
+    )
 
     if not analysis_id:
         empty_state(

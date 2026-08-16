@@ -17,6 +17,8 @@ from ...domain.enums import GrowthChannel, LaunchHorizon, PricingModel
 from ...service import StudioService
 from ..components import (
     confidence_chip,
+    lead,
+    page_header,
     empty_state,
     esc,
     format_price,
@@ -24,7 +26,7 @@ from ..components import (
     kpi,
     meter,
 )
-from ..theme import PALETTE, score_colour
+from ..theme import PALETTE, SERIES, score_colour
 
 
 def render(service: StudioService, product: dict, analysis_id: str | None) -> None:
@@ -32,18 +34,46 @@ def render(service: StudioService, product: dict, analysis_id: str | None) -> No
         empty_state("Run an analysis first", "Strategy is built from analysis output.")
         return
 
+    page_header(
+        "Strategy",
+        "What to do about what the analysis found - how to position the product, "
+        "what to charge, where customers will come from, and how to launch.",
+    )
+
     data = service.dashboard(analysis_id)
     tabs = st.tabs(["Positioning", "Pricing", "Growth", "Go-to-market", "Simulation lab"])
 
     with tabs[0]:
+        lead(
+            "Several genuinely different strategies, each scored for how well this "
+            "product could actually hold it, plus ready-to-use messaging for the "
+            "recommended one."
+        )
         _positioning(data.get("positioning"))
     with tabs[1]:
+        lead(
+            "What to charge and what to charge for. Competitor prices are graded by "
+            "evidence - an unpublished price is recorded as unknown rather than guessed."
+        )
         _pricing(data.get("pricing"))
     with tabs[2]:
+        lead(
+            "Acquisition channels scored against this product's price point and buyer, "
+            "with the cheapest first experiment for each - and the channels to avoid."
+        )
         _growth(data.get("growth"))
     with tabs[3]:
+        lead(
+            "One beachhead segment and a phased launch plan across 30, 60 and 90 days "
+            "then 6 and 12 months."
+        )
         _gtm(data.get("gtm"))
     with tabs[4]:
+        lead(
+            "Model the economics yourself. Everything here is computed from the inputs "
+            "on screen - raising price reduces customer count through an elasticity "
+            "curve, so revenue can fall when price rises."
+        )
         _simulator(service, product, analysis_id)
 
 
@@ -270,7 +300,7 @@ def _growth(growth: dict[str, Any] | None) -> None:
                 for c in channels
             ]
         ).set_index("Channel")
-        st.bar_chart(chart, height=320, color=PALETTE["primary_2"])
+        st.bar_chart(chart, height=320, color=PALETTE["primary"])
 
         for channel in channels:
             label = (
@@ -595,6 +625,8 @@ def _simulator(service: StudioService, product: dict, analysis_id: str) -> None:
             ]
         ).set_index("Month"),
         height=300,
+        # Fixed categorical order, never cycled.
+        color=SERIES[:2],
     )
 
     with st.form("save_scenario"):

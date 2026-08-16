@@ -30,6 +30,24 @@ def esc(value: Any) -> str:
     return html.escape(str(value if value is not None else ""), quote=True)
 
 
+def page_header(name: str, purpose: str) -> None:
+    """Name the screen and say what question it answers.
+
+    Every surface gets one. A dashboard that assumes you already know what
+    "Radar" means is only usable by the person who built it.
+    """
+    st.markdown(
+        f'<div class="page-head"><div class="name">{esc(name)}</div>'
+        f'<div class="purpose">{esc(purpose)}</div></div>',
+        unsafe_allow_html=True,
+    )
+
+
+def lead(text: str) -> None:
+    """A short explanation above a tab's content: what it is, how to read it."""
+    st.markdown(f'<div class="lead">{esc(text)}</div>', unsafe_allow_html=True)
+
+
 def hero(title: str, subtitle: str) -> None:
     st.markdown(
         f'<div class="hero"><div class="title">{esc(title)}</div>'

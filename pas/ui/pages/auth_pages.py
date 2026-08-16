@@ -12,7 +12,7 @@ import streamlit as st
 from ...auth.models import ROLE_PERMISSIONS, AuthError, Permission, Role
 from ...auth.passwords import MIN_PASSWORD_LENGTH, PasswordError
 from ...service import StudioService
-from ..components import chip, empty_state, esc, kpi
+from ..components import chip, empty_state, esc, kpi, page_header
 from ..theme import PALETTE
 
 SESSION_TOKEN_KEY = "auth_token"
@@ -119,7 +119,11 @@ def _signup_form(service: StudioService, *, first_run: bool) -> None:
 
 def render_account(service: StudioService) -> None:
     identity = service.identity
-    st.markdown("### Account & access")
+    page_header(
+        "Account and access",
+        "Who can see this workspace and what they may do, plus API keys and a "
+        "record of every change made.",
+    )
 
     if identity.is_dev:
         st.warning(

@@ -14,7 +14,7 @@ from ...research.documents import (
     DocumentError,
 )
 from ...service import StudioService
-from ..components import chip, empty_state, esc, kpi
+from ..components import chip, empty_state, esc, kpi, lead, page_header
 from ..theme import PALETTE
 
 SENTIMENT_COLOURS = {
@@ -34,19 +34,29 @@ SEVERITY_COLOURS = {
 
 
 def render(service: StudioService, product: dict, analysis_id: str | None) -> None:
-    st.markdown("### Voice of customer")
-    st.caption(
-        "Analyses feedback you supply — reviews, interviews, tickets, survey "
-        "responses. This is the only place the platform reads real customer words, "
-        "which makes it the strongest evidence available."
+    page_header(
+        "Customers",
+        "What your buyers actually say. This is the only place the platform reads "
+        "real customer words, which makes it the strongest evidence available.",
     )
 
     tabs = st.tabs(["Themes", "Add feedback", "Sources"])
     with tabs[0]:
+        lead(
+            "Recurring themes across everything you have uploaded, with the share of "
+            "feedback each represents. Every quote is checked against your own data "
+            "before it is stored - anything unmatched is discarded."
+        )
         _themes(service, product, analysis_id)
     with tabs[1]:
+        lead(
+            "Upload a review export (CSV, TSV, JSON, TXT or PDF) or paste text. The "
+            "text column is detected automatically, and re-uploading an overlapping "
+            "export cannot inflate a theme."
+        )
         _ingest(service, product)
     with tabs[2]:
+        lead("Every batch you have imported, and where it came from.")
         _sources(service, product)
 
 
@@ -126,7 +136,7 @@ def _themes(service: StudioService, product: dict, analysis_id: str | None) -> N
             [{"Theme": c["label"][:40], "Share %": c["share_pct"]} for c in clusters]
         ).set_index("Theme")
         st.bar_chart(chart, height=max(240, 34 * len(clusters)), horizontal=True,
-                     color=PALETTE["primary_2"])
+                     color=PALETTE["primary"])
 
         st.markdown("#### Themes")
         for cluster in clusters:

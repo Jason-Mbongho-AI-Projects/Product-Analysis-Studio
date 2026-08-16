@@ -27,20 +27,65 @@ from .pages import (
     workroom,
 )
 
-#: route -> (label, requires a product, permission needed to see it)
-ROUTES: dict[str, tuple[str, bool, Permission]] = {
-    "intake": ("Products", False, Permission.VIEW),
-    "workroom": ("Analysis", True, Permission.VIEW),
-    "strategy": ("Strategy", True, Permission.VIEW),
-    "radar": ("Radar", True, Permission.VIEW),
-    "voice": ("Customers", True, Permission.VIEW),
-    "decide": ("Decide", True, Permission.VIEW),
-    "ask": ("Ask", True, Permission.ASK),
-    "alerts": ("Alerts", True, Permission.VIEW),
-    "reports": ("Reports", True, Permission.EXPORT),
-    "account": ("Account", False, Permission.VIEW),
-    "diagnostics": ("Diagnostics", False, Permission.VIEW_DIAGNOSTICS),
+#: route -> (label, one-line purpose, requires a product, permission)
+#:
+#: The purpose text is not decoration. Eleven bare nouns in a sidebar are only
+#: navigable by someone who already knows the product.
+ROUTES: dict[str, tuple[str, str, bool, Permission]] = {
+    "intake": (
+        "Products", "Start here. Add a product or open a previous analysis.",
+        False, Permission.VIEW,
+    ),
+    "workroom": (
+        "Analysis", "What is true: score, profile, competitors, market, customers.",
+        True, Permission.VIEW,
+    ),
+    "strategy": (
+        "Strategy", "What to do: positioning, pricing, growth, launch plan.",
+        True, Permission.VIEW,
+    ),
+    "radar": (
+        "Radar", "What is coming: ranked opportunities, threats and what-if scenarios.",
+        True, Permission.VIEW,
+    ),
+    "voice": (
+        "Customers", "What buyers actually say. Upload reviews or interviews.",
+        True, Permission.VIEW,
+    ),
+    "decide": (
+        "Decide", "Accept or reject recommendations, and own the roadmap.",
+        True, Permission.VIEW,
+    ),
+    "ask": (
+        "Ask", "Question the intelligence in plain English, with citations.",
+        True, Permission.ASK,
+    ),
+    "alerts": (
+        "Alerts", "Competitor changes worth knowing about, and what to watch.",
+        True, Permission.VIEW,
+    ),
+    "reports": (
+        "Reports", "Download findings as documents or structured data.",
+        True, Permission.EXPORT,
+    ),
+    "account": (
+        "Account", "People, roles, API keys and activity.",
+        False, Permission.VIEW,
+    ),
+    "diagnostics": (
+        "Diagnostics", "Spend, failures, jobs and system health.",
+        False, Permission.VIEW_DIAGNOSTICS,
+    ),
 }
+
+#: Sidebar grouping. Ordering follows the actual workflow rather than an
+#: alphabetical list, so the sidebar reads as a sequence.
+NAV_GROUPS: list[tuple[str, list[str]]] = [
+    ("Analyse", ["intake", "workroom", "voice"]),
+    ("Strategise", ["strategy", "radar"]),
+    ("Act", ["decide", "ask", "alerts", "reports"]),
+    ("System", ["account", "diagnostics"]),
+]
 
 
 @st.cache_resource(show_spinner=False)
@@ -83,10 +128,16 @@ def _sidebar(service: StudioService, product: dict | None) -> str:
         st.caption("AI product intelligence & strategy OS")
 
         # Only offer routes this identity may actually use.
-        options = [
+        # Routes the identity may use at all, regardless of product selection.
+        permitted = [
             key
-            for key, (_label, needs_product, permission) in ROUTES.items()
-            if (product is not None or not needs_product) and identity.can(permission)
+            for key, (_label, _purpose, _needs, permission) in ROUTES.items()
+            if identity.can(permission)
+        ]
+        # Of those, the ones reachable right now.
+        options = [
+            key for key in permitted
+            if product is not None or not ROUTES[key][2]
         ]
         if not options:
             options = ["account"]
@@ -100,16 +151,44 @@ def _sidebar(service: StudioService, product: dict | None) -> str:
         def label_for(key: str) -> str:
             label = ROUTES[key][0]
             if key == "alerts" and unread:
-                return f"{label} ({unread})"
+                return f"{label}  ({unread})"
             return label
 
-        route = st.radio(
-            "Navigation",
-            options=options,
-            format_func=label_for,
-            index=options.index(current),
-            label_visibility="collapsed",
-        )
+        # Nav buttons rather than one radio per group: several radios each hold
+        # their own selection, so two groups can show a selected item at once
+        # and clicking one does not clear the other. Buttons set the route
+        # explicitly, which is both correct and closer to how a sidebar reads.
+        route = current
+        for group_name, members in NAV_GROUPS:
+            available = [key for key in members if key in permitted]
+            if not available:
+                continue
+            st.markdown(
+                f"<div style='font-size:0.64rem;letter-spacing:0.12em;"
+                f"text-transform:uppercase;color:#626d7d;font-weight:650;"
+                f"margin:1rem 0 0.35rem'>{group_name}</div>",
+                unsafe_allow_html=True,
+            )
+            for key in available:
+                reachable = key in options
+                # Unreachable routes are shown disabled rather than hidden, so a
+                # new user can see the shape of the product instead of guessing
+                # what appears once they pick something.
+                if st.button(
+                    label_for(key),
+                    key=f"nav_{key}",
+                    width="stretch",
+                    type="primary" if key == current else "secondary",
+                    disabled=not reachable,
+                    help=None if reachable else "Select a product first",
+                ):
+                    # `current` was read before these buttons rendered, so the
+                    # highlight would lag the content by one render without an
+                    # explicit rerun.
+                    st.session_state["route"] = key
+                    st.rerun()
+
+        st.caption(ROUTES[route][1])
 
         st.markdown("---")
         if product:
@@ -150,8 +229,20 @@ def _sidebar(service: StudioService, product: dict | None) -> str:
 
 def _decide(service: StudioService, product: dict, analysis_id: str | None) -> None:
     """Decision board and roadmap together - accept a recommendation, see it land."""
+    from .components import lead, page_header
+
+    page_header(
+        "Decide",
+        "Turn findings into commitments. Accepting a recommendation puts it on the "
+        "roadmap; rejecting it is remembered, so future analyses stop suggesting it.",
+    )
+
     tabs = st.tabs(["Decision board", "Roadmap"])
     with tabs[0]:
+        lead(
+            "Each recommendation with its reasoning and evidence. Verdicts include "
+            "DO NOT BUILD - being told what to skip is as useful as what to ship."
+        )
         if not analysis_id:
             from .components import empty_state
 
@@ -159,6 +250,10 @@ def _decide(service: StudioService, product: dict, analysis_id: str | None) -> N
         else:
             workroom.render_board(service, service.dashboard(analysis_id))
     with tabs[1]:
+        lead(
+            "Now, Next and Later. Items arrive here when you accept a recommendation, "
+            "and can be reordered, assigned and discussed."
+        )
         workroom.render_roadmap(service, product)
 
 
