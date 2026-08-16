@@ -410,7 +410,7 @@ def contrast_ratio(foreground: str, background: str) -> float:
 
 
 #: The darkest surface any text sits on.
-BACKGROUND = "#0b0c0e"
+BACKGROUND = "#1b2130"
 
 
 def test_contrast_helper_matches_known_values():

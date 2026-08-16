@@ -1,16 +1,17 @@
 """Visual identity.
 
-A restrained, neutral dark system. Every colour is measured rather than chosen
-by eye: the chart series clear the data-viz validator against this surface
-(lightness band, chroma floor, colour-vision separation ΔE 9.0, normal-vision
-ΔE 25.8, contrast), and every UI and status colour clears WCAG AA at 4.5:1 -
-not merely the 3:1 large-text floor.
+A cool slate dark system. Every colour is measured rather than chosen by eye:
+the chart series clear the data-viz validator against this surface (lightness
+band, chroma floor, colour-vision separation, contrast), every UI and status
+colour clears WCAG AA at 4.5:1, and every chart mark clears the 3:1 graphical
+floor.
 
 The design decisions that matter:
 
-* **Neutral greys, not blue-tinted navy.** A coloured ground fights the data
-  sitting on it. The plane is near-black and the surfaces step up in small,
-  even increments.
+* **A slate ground, not near-black.** Pure black reads flat and makes every
+  border work to define anything; a blue-grey plane has presence, and panels
+  above it separate by luminance alone. Surfaces step evenly, so a raised
+  element nested inside a panel still reads as raised.
 * **Hairline borders at low alpha, not solid rules.** Structure comes from
   luminance steps and spacing; visible boxes everywhere read as a form, not a
   dashboard.
@@ -34,36 +35,47 @@ import streamlit as st
 # ---------------------------------------------------------------------------
 
 PALETTE = {
-    # Surfaces: even luminance steps, neutral hue.
-    "plane": "#0b0c0e",
-    "bg_1": "#0b0c0e",
-    "bg_2": "#0e0f12",
-    "surface": "#111214",
-    "surface_raised": "#17181b",
-    "surface_hover": "#1c1d21",
+    # Surfaces: a cool slate ramp. Near-black reads flat and forces every border
+    # to work hard for definition; a blue-grey ground has presence and lets the
+    # panels above it separate by luminance alone. Steps are even, so nesting a
+    # raised element inside a panel still reads.
+    "plane": "#1b2130",
+    "bg_1": "#1b2130",
+    "bg_2": "#1e2434",
+    "surface": "#222939",
+    "surface_raised": "#293143",
+    "surface_hover": "#313a4e",
+    "sidebar": "#171d29",
+    "input": "#1a2030",
     # Borders are alpha so they sit correctly on any surface beneath them.
-    "line": "rgba(255,255,255,0.055)",
-    "line_strong": "rgba(255,255,255,0.10)",
-    # Ink.
-    "text": "#ededf0",
-    "text_secondary": "#a1a1aa",
-    "muted": "#8b8b94",
-    # One accent.
+    "line": "rgba(255,255,255,0.075)",
+    "line_strong": "rgba(255,255,255,0.14)",
+    # Ink, stepped for this ground.
+    "text": "#eef1f6",
+    "text_secondary": "#aeb6c4",
+    "muted": "#949cab",
+    # One accent for controls.
     "primary": "#4b8bf5",
     "primary_hover": "#6b9ff7",
-    "primary_soft": "rgba(75,139,245,0.14)",
+    "primary_soft": "rgba(75,139,245,0.16)",
     "primary_2": "#4b8bf5",
-    # Status - reserved, never decorative.
+    # Status - reserved, never decorative. Stepped for the lifted surface so
+    # each still clears WCAG AA at 4.5:1 rather than the 3:1 graphical floor.
     "success": "#3fb950",
-    "accent": "#d29922",
-    "warning": "#d29922",
-    "serious": "#e08c50",
+    "accent": "#d9a441",
+    "warning": "#d9a441",
+    "serious": "#e0693a",
     "danger": "#f0605d",
-    "violet": "#a78bfa",
+    "violet": "#9d90f0",
 }
 
-#: Validated categorical slots, fixed order, never cycled. All six clear the
-#: lightness band, chroma floor, CVD separation and contrast on this surface.
+#: Validated categorical slots for CHART MARKS, fixed order, never cycled.
+#:
+#: These are deliberately a shade deeper than the UI colours below. Chart marks
+#: must sit inside a common lightness band so a series set reads as one family;
+#: UI text and chips have no such constraint and are stepped lighter to clear
+#: 4.5:1 on this surface. Marks only need the 3:1 graphical floor, which these
+#: clear. Conflating the two would either wash out the charts or dim the text.
 SERIES = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#9085e9"]
 
 #: Workflow domains. Colour here encodes *where you are* - it is navigation
@@ -72,35 +84,35 @@ SERIES = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#9085e9"]
 #: side by side. Blue and violet were the obvious first choice and were
 #: rejected: ΔE 11.5 apart to normal vision, 3.0 under protanopia.
 DOMAINS = {
-    "Analyse": "#3987e5",
-    "Strategise": "#d95926",
-    "Act": "#199e70",
-    "System": "#8b8b94",
+    "Analyse": "#4b8bf5",
+    "Strategise": "#e0693a",
+    "Act": "#22b07f",
+    "System": "#9096a1",
 }
-DEFAULT_DOMAIN = "#3987e5"
+DEFAULT_DOMAIN = "#4b8bf5"
 
 #: Evidence grade is a status ladder, so it borrows status-family colours:
 #: verified reads as good, hypothesis reads as caution.
 GRADE_STYLES = {
     "verified_fact": ("Verified", "#3fb950"),
     "strong_inference": ("Strong inference", "#4b8bf5"),
-    "user_supplied": ("You told us", "#a78bfa"),
-    "weak_inference": ("Weak inference", "#d29922"),
-    "ai_hypothesis": ("AI hypothesis", "#e08c50"),
+    "user_supplied": ("You told us", "#9d90f0"),
+    "weak_inference": ("Weak inference", "#d9a441"),
+    "ai_hypothesis": ("AI hypothesis", "#e0693a"),
 }
 
 VERDICT_STYLES = {
     "must_build": ("Must build", "#f0605d"),
-    "should_build": ("Should build", "#d29922"),
+    "should_build": ("Should build", "#d9a441"),
     "could_build": ("Could build", "#4b8bf5"),
-    "do_not_build": ("Do not build", "#8b8b94"),
-    "investigate_first": ("Investigate first", "#a78bfa"),
+    "do_not_build": ("Do not build", "#9096a1"),
+    "investigate_first": ("Investigate first", "#9d90f0"),
 }
 
 THREAT_STYLES = {
     "critical": "#f0605d",
-    "high": "#e08c50",
-    "medium": "#d29922",
+    "high": "#e0693a",
+    "medium": "#d9a441",
     "low": "#3fb950",
 }
 
@@ -111,6 +123,8 @@ _VARIABLES = "\n".join(
         ("surface", "surface"),
         ("surface-raised", "surface_raised"),
         ("surface-hover", "surface_hover"),
+        ("sidebar", "sidebar"),
+        ("input", "input"),
         ("line", "line"),
         ("line-strong", "line_strong"),
         ("text", "text"),
@@ -150,7 +164,7 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stSidebar"] {
 /* ---- Sidebar: compact, quiet, with a clear current item ---- */
 [data-testid="stSidebar"] {
     border-right: 1px solid var(--line);
-    background: #090a0c;
+    background: var(--sidebar);
 }
 [data-testid="stSidebar"] .block-container { padding-top: 1.5rem; }
 
@@ -189,7 +203,7 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stSidebar"] {
     font-weight: 680; margin: 1.15rem 0 0.4rem 0.15rem;
 }
 [data-testid="stSidebar"] .stButton > button:disabled {
-    color: #4d4d55; background: transparent;
+    color: #626a79; background: transparent;
 }
 
 /* ---- Page header ---- */
@@ -303,7 +317,7 @@ div[data-testid="stTextArea"] textarea:focus {
     border-color: var(--primary) !important;
 }
 div[data-testid="stTextInput"] input::placeholder,
-div[data-testid="stTextArea"] textarea::placeholder { color: #5c5c65 !important; }
+div[data-testid="stTextArea"] textarea::placeholder { color: #737b8a !important; }
 label, .stMarkdown label {
     color: var(--text-2) !important; font-size: 0.83rem; font-weight: 500;
 }

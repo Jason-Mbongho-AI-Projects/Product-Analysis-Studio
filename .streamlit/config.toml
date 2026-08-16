@@ -11,12 +11,12 @@
 [theme]
 base = "dark"
 primaryColor = "#4b8bf5"
-backgroundColor = "#0b0c0e"
-secondaryBackgroundColor = "#111214"
-textColor = "#ededf0"
+backgroundColor = "#1b2130"
+secondaryBackgroundColor = "#222939"
+textColor = "#eef1f6"
 linkColor = "#4b8bf5"
-codeBackgroundColor = "#17181b"
-borderColor = "#1e1f23"
+codeBackgroundColor = "#293143"
+borderColor = "#333c4e"
 font = "sans-serif"
 
 [server]
