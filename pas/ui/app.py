@@ -135,8 +135,11 @@ def _sidebar(service: StudioService, product: dict | None) -> str:
     identity = service.identity
 
     with st.sidebar:
-        st.markdown("### Product Analysis Studio")
-        st.caption("AI product intelligence & strategy OS")
+        st.markdown(
+            '<div class="brand-mark brand-3d">Product Analysis Studio</div>'
+            '<div class="brand-sub">AI product intelligence &amp; strategy OS</div>',
+            unsafe_allow_html=True,
+        )
 
         # Only offer routes this identity may actually use.
         # Routes the identity may use at all, regardless of product selection.

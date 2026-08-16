@@ -197,6 +197,16 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stSidebar"] {
     background: var(--domain-soft, var(--primary-soft));
 }
 
+/* The brand in the sidebar: same relief, smaller, so the two agree. */
+.brand-mark {
+    font-size: 1.06rem; font-weight: 700; letter-spacing: -0.025em;
+    line-height: 1.2; margin: 0 0 0.15rem 0;
+}
+.brand-sub {
+    color: var(--muted); font-size: 0.755rem; line-height: 1.4;
+    margin: 0 0 0.2rem 0;
+}
+
 /* Group label, tinted by domain. */
 .nav-group {
     font-size: 0.635rem; letter-spacing: 0.12em; text-transform: uppercase;
@@ -206,12 +216,58 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stSidebar"] {
     color: #626a79; background: transparent;
 }
 
+/* ---- The product name, in relief ----
+   Three layers make this read as dimensional rather than as a drop shadow:
+   a face lit from above (gradient light-to-dark), a short hard extrusion in
+   near-black stepping down and back, and a soft ambient shadow beneath.
+   `color` is set first as a fallback - if background-clip:text is unsupported
+   the text stays visible rather than rendering transparent. */
+/* Raised-relief brand type. The face carries a top-lit gradient (bright at the
+   cap line, cooling toward the baseline) and the depth comes from a stack of
+   hard drop-shadows.
+
+   Each drop-shadow in a filter chain is applied to the *output* of the previous
+   one, so the offsets compound: uniform 1px steps build one solid 5px side face,
+   whereas 1/2/3px would land at 1/3/6px and leave gaps that read as a blurred
+   shadow. The ramp darkens down the stack so the extrusion turns away from the
+   light, and it is navy rather than black so it sits in the slate palette
+   instead of punching a hole through it. `color` is set first as the fallback:
+   if background-clip:text is unsupported the name renders white, never invisible.
+*/
+.brand-3d {
+    color: #ffffff;
+    background: linear-gradient(180deg, #ffffff 0%, #edf2f9 40%, #c2cfe3 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    filter:
+        drop-shadow(0 1px 0 #2b3242)
+        drop-shadow(0 1px 0 #252c3a)
+        drop-shadow(0 1px 0 #1f2532)
+        drop-shadow(0 1px 0 #191e29)
+        drop-shadow(0 1px 0 #141821)
+        drop-shadow(0 5px 8px rgba(0, 0, 0, 0.42));
+    padding-bottom: 0.14em;
+}
+
+/* The sidebar mark is a sixth of the hero's size, so it takes a proportionally
+   shallower extrusion. Depth has to stay a roughly constant *fraction* of the
+   cap height or it stops reading as the same object: the hero's 5px on ~35px is
+   about a seventh, so 1px on ~12px here matches. Two steps at this size read as
+   a ghosted second copy of the name rather than a side face. */
+.brand-mark.brand-3d {
+    filter:
+        drop-shadow(0 1px 0 #1d2431)
+        drop-shadow(0 1px 3px rgba(0, 0, 0, 0.34));
+    padding-bottom: 0.08em;
+}
+
 /* ---- Page header ---- */
 .hero { margin: 0 0 1.75rem 0; }
 .hero .title {
-    font-size: clamp(1.5rem, 2.2vw, 1.9rem);
-    font-weight: 640;
-    letter-spacing: -0.028em;
+    font-size: clamp(1.7rem, 2.6vw, 2.3rem);
+    font-weight: 700;
+    letter-spacing: -0.032em;
     color: var(--text);
     line-height: 1.15;
     margin: 0;

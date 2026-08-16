@@ -81,7 +81,7 @@ def lead(text: str) -> None:
 
 def hero(title: str, subtitle: str) -> None:
     st.markdown(
-        f'<div class="hero"><div class="title">{esc(title)}</div>'
+        f'<div class="hero"><div class="title brand-3d">{esc(title)}</div>'
         f'<div class="subtitle">{esc(subtitle)}</div></div>',
         unsafe_allow_html=True,
     )
