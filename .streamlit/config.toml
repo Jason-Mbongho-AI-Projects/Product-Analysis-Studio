@@ -1,0 +1,29 @@
+# Streamlit theming.
+#
+# The stylesheet in pas/ui/theme.py cannot reach widget internals — radio
+# accents, tab underlines, toggle fills, the toolbar — because Streamlit renders
+# those from its own theme. Without this file the base theme stays light and its
+# default red accent (#FF4B4B) clashes with the purple/cyan palette.
+#
+# Set these here rather than piling on more CSS overrides: this is the supported
+# mechanism and it fixes the cause instead of the symptoms.
+
+[theme]
+base = "dark"
+primaryColor = "#7c3aed"
+backgroundColor = "#0a1324"
+secondaryBackgroundColor = "#111c33"
+textColor = "#e2e8f0"
+linkColor = "#22d3ee"
+codeBackgroundColor = "#0b1730"
+borderColor = "#243449"
+font = "sans-serif"
+
+[server]
+# Loopback only. Combined with authentication being off by default, binding
+# wider would expose every analysis to anyone who can route to this machine.
+address = "localhost"
+headless = true
+
+[browser]
+gatherUsageStats = false

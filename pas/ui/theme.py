@@ -78,7 +78,9 @@ html, body, [data-testid="stAppViewContainer"] {
     color: var(--text);
 }
 
-.block-container { padding-top: 2rem; padding-bottom: 3rem; max-width: 1400px; }
+/* Streamlit's toolbar is fixed to the top of the viewport, so the first
+   element needs clearance or it renders underneath it. */
+.block-container { padding-top: 3.5rem; padding-bottom: 3rem; max-width: 1400px; }
 
 [data-testid="stSidebar"] {
     background: rgba(8, 15, 30, 0.92);
