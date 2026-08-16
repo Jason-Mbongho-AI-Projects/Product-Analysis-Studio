@@ -465,6 +465,23 @@ def test_stylesheet_defines_visible_focus_states():
     assert "outline: none" not in focus_block
 
 
+def test_score_dimension_labels_keep_acronyms_upper_and_stay_fifteen():
+    """`str.title()` lowercases everything after the first letter of a word.
+
+    That rendered "Pmf Potential" and "Gtm Readiness" on the score sheet. The
+    acronym map that fixes it lives at module scope on purpose: a plain
+    assignment inside an Enum body becomes a *member*, which silently added a
+    sixteenth score dimension and broke the weighted composite.
+    """
+    from pas.domain.enums import ScoreDimension
+
+    assert len(list(ScoreDimension)) == 15
+    labels = {d.label for d in ScoreDimension}
+    assert "PMF Potential" in labels
+    assert "GTM Readiness" in labels
+    assert not any(re.search(r"\b(Pmf|Gtm)\b", label) for label in labels)
+
+
 def test_brand_relief_has_a_paint_fallback_and_an_unbroken_extrusion():
     """The 3D app name has two ways to go wrong, both silent.
 

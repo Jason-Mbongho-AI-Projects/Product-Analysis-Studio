@@ -25,6 +25,7 @@ from ..components import (
     grade_chip,
     kpi,
     meter,
+    truncate,
 )
 from ..theme import PALETTE, SERIES, score_colour
 
@@ -187,7 +188,7 @@ def _pricing(pricing: dict[str, Any] | None) -> None:
     with cols[0]:
         kpi("Recommended model", PricingModel(pricing["recommended_model"]).label)
     with cols[1]:
-        kpi("Value metric", pricing["value_metric"][:28] or "—")
+        kpi("Value metric", truncate(pricing["value_metric"], 34) or "—")
     with cols[2]:
         economics = pricing.get("economics", {})
         kpi("Est. ARPU", f"${float(economics.get('arpu_monthly_usd', 0)):,.0f}/mo")

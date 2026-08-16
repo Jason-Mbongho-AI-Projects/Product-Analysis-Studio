@@ -168,7 +168,7 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stSidebar"] {
 }
 [data-testid="stSidebar"] .block-container { padding-top: 1.5rem; }
 
-[data-testid="stSidebar"] .stButton > button {
+[data-testid="stSidebar"] .stButton button {
     background: transparent;
     border: 1px solid transparent;
     color: var(--text-2);
@@ -181,11 +181,19 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stSidebar"] {
     min-height: 0;
     transition: background .12s ease, color .12s ease;
 }
-[data-testid="stSidebar"] .stButton > button:hover {
+/* Streamlit centres the label in a flex div *inside* the button, so setting
+   justify-content on the button alone does nothing. Left-aligning here lines
+   the route names up with the group headings above them; centred items read as
+   misaligned against a left-aligned "ANALYSE". */
+[data-testid="stSidebar"] .stButton button > div {
+    justify-content: flex-start;
+    width: 100%;
+}
+[data-testid="stSidebar"] .stButton button:hover {
     background: var(--surface-hover); color: var(--text); border-color: transparent;
 }
 /* Current route: a soft wash and an accent rule, not a saturated fill. */
-[data-testid="stSidebar"] .stButton > button[kind="primary"] {
+[data-testid="stSidebar"] .stButton button[kind="primary"] {
     background: var(--domain-soft, var(--primary-soft));
     color: var(--text);
     border: 1px solid transparent;
@@ -193,7 +201,7 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stSidebar"] {
     border-radius: 3px var(--radius) var(--radius) 3px;
     font-weight: 600;
 }
-[data-testid="stSidebar"] .stButton > button[kind="primary"]:hover {
+[data-testid="stSidebar"] .stButton button[kind="primary"]:hover {
     background: var(--domain-soft, var(--primary-soft));
 }
 
@@ -212,16 +220,18 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stSidebar"] {
     font-size: 0.635rem; letter-spacing: 0.12em; text-transform: uppercase;
     font-weight: 680; margin: 1.15rem 0 0.4rem 0.15rem;
 }
-[data-testid="stSidebar"] .stButton > button:disabled {
-    color: #626a79; background: transparent;
+/* A route you cannot reach yet must recede, not advance. `border-color` has to
+   be reset explicitly: the base rule's `border: 1px solid transparent` is
+   overridden by Streamlit's own disabled styling, which drew a visible box. On
+   the landing screen every product-scoped route is disabled, so the effect was
+   backwards - the unavailable routes were the only boxed items in the sidebar
+   and read as the primary navigation. */
+[data-testid="stSidebar"] .stButton button:disabled {
+    color: #626a79;
+    background: transparent;
+    border-color: transparent;
 }
 
-/* ---- The product name, in relief ----
-   Three layers make this read as dimensional rather than as a drop shadow:
-   a face lit from above (gradient light-to-dark), a short hard extrusion in
-   near-black stepping down and back, and a soft ambient shadow beneath.
-   `color` is set first as a fallback - if background-clip:text is unsupported
-   the text stays visible rather than rendering transparent. */
 /* Raised-relief brand type. The face carries a top-lit gradient (bright at the
    cap line, cooling toward the baseline) and the depth comes from a stack of
    hard drop-shadows.

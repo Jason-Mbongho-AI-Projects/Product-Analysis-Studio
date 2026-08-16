@@ -131,6 +131,15 @@ class ThreatLevel(StrEnum):
     LOW = "low"
 
 
+#: Words `str.title()` gets wrong. Title-casing an acronym lowercases every
+#: letter after the first, so the score sheet rendered "Pmf Potential" and "Gtm
+#: Readiness", which read as typos beside fourteen correct labels.
+#:
+#: Module level, not a class attribute: a plain assignment in an Enum body
+#: becomes a *member*, which would silently add a sixteenth score dimension.
+_ACRONYMS = {"pmf": "PMF", "gtm": "GTM"}
+
+
 class ScoreDimension(StrEnum):
     """The transparent scoring model (spec 3).
 
@@ -156,7 +165,9 @@ class ScoreDimension(StrEnum):
 
     @property
     def label(self) -> str:
-        return self.value.replace("_", " ").title()
+        return " ".join(
+            _ACRONYMS.get(word, word.title()) for word in self.value.split("_")
+        )
 
     @property
     def is_inverted(self) -> bool:
