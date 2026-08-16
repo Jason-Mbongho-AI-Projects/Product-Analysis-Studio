@@ -7,6 +7,7 @@ raw evidence behind it (spec 47/50).
 
 from __future__ import annotations
 
+
 from typing import Any
 
 import pandas as pd
@@ -38,6 +39,10 @@ from ..components import (
 from ..theme import PALETTE, score_colour
 
 LIVE_STATUSES = {AnalysisStatus.PENDING.value, AnalysisStatus.RUNNING.value}
+
+#: How often the progress page re-polls while an analysis is running. Long
+#: enough not to thrash the database, short enough to feel live.
+POLL_SECONDS = 4
 
 
 def render(service: StudioService) -> None:
@@ -208,7 +213,25 @@ def _render_comparison(service: StudioService, product: dict, versions: list[dic
 
 
 def _render_progress(service: StudioService, analysis: dict) -> None:
-    """Live progress with partial results as they land (spec 50)."""
+    """Live progress with partial results as they land (spec 50).
+
+    Rendered inside a timed fragment: results arrive every few seconds, and a
+    static page made a working analysis look frozen for minutes. A fragment
+    reruns only this panel on a timer, rather than sleeping the script thread
+    and re-running the whole page - which would block a server thread for the
+    entire duration of the analysis.
+    """
+
+    @st.fragment(run_every=POLL_SECONDS)
+    def live_panel() -> None:
+        # Re-read on every tick so progress and stage are current.
+        current = service.get_analysis(analysis["id"]) or analysis
+        _progress_body(service, current)
+
+    live_panel()
+
+
+def _progress_body(service: StudioService, analysis: dict) -> None:
     job = service.job_for(analysis["id"])
     progress = float(analysis.get("progress", 0))
     st.progress(progress, text=f"{analysis.get('stage') or 'Working'} · {progress:.0%}")
@@ -239,7 +262,10 @@ def _render_progress(service: StudioService, analysis: dict) -> None:
             "Refresh to pick up its stored state."
         )
 
-    st.caption("This page does not auto-refresh; use Refresh to poll progress.")
+    st.caption(
+        "Sections appear above as each agent finishes. This panel refreshes "
+        "itself while the analysis runs."
+    )
 
 
 # ---------------------------------------------------------------------------

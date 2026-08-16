@@ -367,3 +367,156 @@ def test_every_confidence_field_uses_the_normalising_type():
             if value > 1.0:
                 offenders.append(f"{obj.__name__}.{field_name}")
     assert not offenders, f"raw float confidence fields: {offenders}"
+
+
+# ---------------------------------------------------------------------------
+# Execution DAG
+#
+# Agents now run concurrently by dependency level, so a wrong `requires`
+# declaration means an agent reads data that has not been written yet -
+# silently, and only sometimes. These tests derive the real dependencies from
+# the prompt bodies and assert the declarations cover them.
+# ---------------------------------------------------------------------------
+
+
+#: Data access in a build_prompt -> the agent that produces it.
+_PRODUCERS = {
+    "list_competitors": "competitive_intelligence",
+    "_competitor_digest": "competitive_intelligence",
+    "get_product_profile": "product_analyst",
+    "_profile_digest": "product_analyst",
+    "get_market": "market_analyst",
+    "_market_digest": "market_analyst",
+    "get_customers": "customer_intelligence",
+    "_customer_digest": "customer_intelligence",
+    "get_scores": "scoring",
+    "list_recommendations": "gap_analysis",
+    "get_pricing": "pricing_strategist",
+    "get_positioning": "positioning_strategist",
+    "get_growth": "growth_strategist",
+}
+
+
+def _actual_dependencies(agent) -> set[str]:
+    import inspect
+
+    source = inspect.getsource(agent.build_prompt)
+    deps = {
+        producer
+        for call, producer in _PRODUCERS.items()
+        if call in source and producer != agent.name
+    }
+    if "results.get(" in source:
+        for other in ("product_analyst", "competitive_intelligence"):
+            if other in source and other != agent.name:
+                deps.add(other)
+    # product_context() renders the classification that intake writes.
+    if "product_context" in source and agent.name != "intake":
+        deps.add("intake")
+    return deps
+
+
+def _transitive_requires(agent, by_name: dict) -> set[str]:
+    """Everything guaranteed to have run before ``agent``.
+
+    A dependency reached through another agent is genuinely satisfied - the
+    level scheduler orders the whole chain - so the closure is the correct
+    thing to check against, not the direct declaration.
+    """
+    seen: set[str] = set()
+    queue = list(agent.requires)
+    while queue:
+        name = queue.pop()
+        if name in seen:
+            continue
+        seen.add(name)
+        parent = by_name.get(name)
+        if parent is not None:
+            queue.extend(parent.requires)
+    return seen
+
+
+def test_declared_dependencies_cover_actual_data_reads():
+    """A missing `requires` entry lets an agent read data that is not there yet.
+
+    With agents running concurrently, that failure is silent and intermittent -
+    which is exactly why it is asserted here rather than left to review.
+    """
+    from pas.agents.pipeline import FULL_PIPELINE
+
+    by_name = {agent.name: agent for agent in FULL_PIPELINE}
+    problems = []
+    for agent in FULL_PIPELINE:
+        actual = _actual_dependencies(agent)
+        guaranteed = _transitive_requires(agent, by_name)
+        missing = actual - guaranteed
+        if missing:
+            problems.append(
+                f"{agent.name} reads {sorted(missing)} but nothing guarantees it has run"
+            )
+    assert not problems, "\n".join(problems)
+
+
+def test_execution_levels_respect_dependencies():
+    """Every agent's dependencies must be satisfied by a strictly earlier level."""
+    from pas.agents.pipeline import FULL_PIPELINE, execution_levels
+
+    levels = execution_levels(FULL_PIPELINE)
+    seen: set[str] = set()
+    for level in levels:
+        for agent in level:
+            unmet = set(agent.requires) - seen
+            assert not unmet, f"{agent.name} scheduled before {sorted(unmet)}"
+        seen.update(agent.name for agent in level)
+
+    assert seen == {agent.name for agent in FULL_PIPELINE}, "an agent was dropped"
+
+
+def test_intake_runs_alone_first():
+    """Intake rewrites the product classification every other agent renders."""
+    from pas.agents.pipeline import FULL_PIPELINE, execution_levels
+
+    levels = execution_levels(FULL_PIPELINE)
+    assert [a.name for a in levels[0]] == ["intake"]
+
+
+def test_levels_actually_parallelise():
+    """If every level held one agent, the scheduler would buy nothing."""
+    from pas.agents.pipeline import FULL_PIPELINE, execution_levels
+
+    levels = execution_levels(FULL_PIPELINE)
+    assert len(levels) < len(FULL_PIPELINE), "no concurrency gained"
+    assert any(len(level) > 1 for level in levels)
+
+
+def test_cycle_is_rejected():
+    from pas.agents.pipeline import execution_levels
+
+    class A(_Dummy):
+        name = "a"
+        requires = ("b",)
+
+    class B(_Dummy):
+        name = "b"
+        requires = ("a",)
+
+    with pytest.raises(ValueError, match="cycle"):
+        execution_levels([A, B])
+
+
+def test_unknown_dependency_is_rejected():
+    from pas.agents.pipeline import execution_levels
+
+    class Orphan(_Dummy):
+        name = "orphan"
+        requires = ("does_not_exist",)
+
+    with pytest.raises(ValueError, match="unknown"):
+        execution_levels([Orphan])
+
+
+def test_intelligence_only_pipeline_is_also_schedulable():
+    from pas.agents.pipeline import INTELLIGENCE_ONLY, execution_levels
+
+    levels = execution_levels(INTELLIGENCE_ONLY)
+    assert levels and all(levels)

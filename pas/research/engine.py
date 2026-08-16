@@ -133,10 +133,26 @@ class ResearchEngine:
         pages: list[dict] = []
         failures: list[dict] = []
 
-        for target in targets:
+        # Fetching is almost entirely network wait, so a small thread pool cuts
+        # the research phase roughly in proportion to the worker count. Kept
+        # modest deliberately: this hits third-party sites, and hammering them
+        # with 20 parallel requests would be rude regardless of what robots.txt
+        # permits.
+        from concurrent.futures import ThreadPoolExecutor
+
+        def fetch_one(target: ResearchTarget):
             if on_progress:
                 on_progress(target.url)
-            result = self._fetcher.fetch(target.url)
+            return target, self._fetcher.fetch(target.url)
+
+        with ThreadPoolExecutor(
+            max_workers=min(len(targets), 4), thread_name_prefix="pas-fetch"
+        ) as pool:
+            outcomes = list(pool.map(fetch_one, targets))
+
+        # Recording happens on this thread: sqlite connections are thread-local,
+        # and the writes are cheap compared with the fetches.
+        for target, result in outcomes:
             record = self._record(target, result)
             (pages if result.ok else failures).append(record)
 

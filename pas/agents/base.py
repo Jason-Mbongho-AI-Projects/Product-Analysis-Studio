@@ -155,6 +155,11 @@ class Agent(ABC, Generic[T]):
     #: True when this agent benefits from the stronger model.
     deep: bool = False
     max_tokens: int = 8000
+    #: Names of agents whose persisted output this agent reads. Used to build
+    #: the execution DAG - agents with no unmet dependency run concurrently.
+    #: Getting this wrong causes an agent to read missing data, so it is
+    #: asserted against the real prompt bodies in the test suite.
+    requires: tuple[str, ...] = ()
 
     @abstractmethod
     def build_prompt(self, ctx: AnalysisContext) -> str:

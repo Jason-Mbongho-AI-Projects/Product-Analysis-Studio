@@ -63,3 +63,39 @@ INTELLIGENCE_ONLY: list[type[Agent]] = [*INTELLIGENCE_STAGE, *SYNTHESIS_STAGE]
 def pipeline_for(depth: str = "full") -> list[type[Agent]]:
     """Return the agent sequence for a requested analysis depth."""
     return INTELLIGENCE_ONLY if depth == "intelligence" else FULL_PIPELINE
+
+
+def execution_levels(agents: list[type[Agent]]) -> list[list[type[Agent]]]:
+    """Group agents into levels that can each run concurrently.
+
+    Level N contains every agent whose dependencies are all satisfied by levels
+    0..N-1. Running one level at a time preserves the exact data dependencies
+    the sequential order guaranteed, while letting independent agents overlap.
+
+    Raises ValueError on a dependency cycle or an unknown dependency name -
+    both are programming errors that would otherwise deadlock or silently drop
+    an agent.
+    """
+    remaining = list(agents)
+    known = {agent.name for agent in agents}
+
+    for agent in agents:
+        unknown = set(agent.requires) - known
+        if unknown:
+            raise ValueError(
+                f"{agent.name} requires unknown agent(s): {', '.join(sorted(unknown))}"
+            )
+
+    levels: list[list[type[Agent]]] = []
+    satisfied: set[str] = set()
+
+    while remaining:
+        ready = [a for a in remaining if set(a.requires) <= satisfied]
+        if not ready:
+            stuck = ", ".join(a.name for a in remaining)
+            raise ValueError(f"Dependency cycle among: {stuck}")
+        levels.append(ready)
+        satisfied.update(a.name for a in ready)
+        remaining = [a for a in remaining if a not in ready]
+
+    return levels

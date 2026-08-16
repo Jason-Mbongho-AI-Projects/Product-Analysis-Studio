@@ -29,6 +29,7 @@ class IntakeAgent(Agent[IntakeClassification]):
     title = "Intake & classification"
     contract = IntakeClassification
     max_tokens = 2000
+    requires = ()
 
     def build_prompt(self, ctx: AnalysisContext) -> str:
         return (
@@ -67,6 +68,7 @@ class ProductAnalystAgent(Agent[ProductProfile]):
     contract = ProductProfile
     deep = True
     max_tokens = 9000
+    requires = ("intake",)
 
     def build_prompt(self, ctx: AnalysisContext) -> str:
         return (
@@ -120,6 +122,7 @@ class CompetitiveIntelligenceAgent(Agent[CompetitorDiscovery]):
     contract = CompetitorDiscovery
     deep = True
     max_tokens = 8000
+    requires = ("intake", "product_analyst")
 
     def build_prompt(self, ctx: AnalysisContext) -> str:
         profile = ctx.results.get("product_analyst")
@@ -161,6 +164,7 @@ class MarketAnalystAgent(Agent[MarketAnalysis]):
     contract = MarketAnalysis
     deep = True
     max_tokens = 9000
+    requires = ("intake",)
 
     def build_prompt(self, ctx: AnalysisContext) -> str:
         return (
@@ -205,6 +209,7 @@ class CustomerIntelligenceAgent(Agent[CustomerIntelligence]):
     title = "Customer intelligence"
     contract = CustomerIntelligence
     max_tokens = 7000
+    requires = ("intake",)
 
     def build_prompt(self, ctx: AnalysisContext) -> str:
         return (
@@ -239,6 +244,7 @@ class ScoringAgent(Agent[ScoringResult]):
     contract = ScoringResult
     deep = True
     max_tokens = 9000
+    requires = ("product_analyst", "competitive_intelligence")
 
     def build_prompt(self, ctx: AnalysisContext) -> str:
         dimensions = "\n".join(
@@ -294,6 +300,7 @@ class GapAnalysisAgent(Agent[GapAnalysis]):
     contract = GapAnalysis
     deep = True
     max_tokens = 9000
+    requires = ("product_analyst", "competitive_intelligence")
 
     def build_prompt(self, ctx: AnalysisContext) -> str:
         competitors = repo.list_competitors(ctx.conn, ctx.analysis_id)
@@ -359,6 +366,13 @@ class ChiefStrategyAgent(Agent[ExecutiveSynthesis]):
     contract = ExecutiveSynthesis
     deep = True
     max_tokens = 6000
+    requires = (
+        "scoring",
+        "gap_analysis",
+        "competitive_intelligence",
+        "market_analyst",
+        "radar",
+    )
 
     def build_prompt(self, ctx: AnalysisContext) -> str:
         conn, analysis_id = ctx.conn, ctx.analysis_id

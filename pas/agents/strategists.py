@@ -72,6 +72,12 @@ class PositioningStrategistAgent(Agent[PositioningStudio]):
     contract = PositioningStudio
     deep = True
     max_tokens = 9000
+    requires = (
+        "product_analyst",
+        "customer_intelligence",
+        "competitive_intelligence",
+        "market_analyst",
+    )
 
     def build_prompt(self, ctx: AnalysisContext) -> str:
         return (
@@ -117,6 +123,11 @@ class PricingStrategistAgent(Agent[PricingStudio]):
     contract = PricingStudio
     deep = True
     max_tokens = 9000
+    requires = (
+        "product_analyst",
+        "customer_intelligence",
+        "competitive_intelligence",
+    )
 
     def build_prompt(self, ctx: AnalysisContext) -> str:
         return (
@@ -170,6 +181,12 @@ class GrowthStrategistAgent(Agent[GrowthStrategy]):
     contract = GrowthStrategy
     deep = True
     max_tokens = 9000
+    requires = (
+        "pricing_strategist",
+        "customer_intelligence",
+        "competitive_intelligence",
+        "market_analyst",
+    )
 
     def build_prompt(self, ctx: AnalysisContext) -> str:
         pricing = repo.get_pricing(ctx.conn, ctx.analysis_id)
@@ -224,6 +241,12 @@ class GTMStrategistAgent(Agent[GTMPlan]):
     contract = GTMPlan
     deep = True
     max_tokens = 9000
+    requires = (
+        "positioning_strategist",
+        "pricing_strategist",
+        "growth_strategist",
+        "competitive_intelligence",
+    )
 
     def build_prompt(self, ctx: AnalysisContext) -> str:
         conn, analysis_id = ctx.conn, ctx.analysis_id

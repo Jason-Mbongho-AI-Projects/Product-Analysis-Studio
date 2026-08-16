@@ -19,7 +19,7 @@ from ..research.engine import ResearchEngine, SiteProvider, UserSourceProvider
 from ..storage import repositories as repo
 from ..storage.db import get_connection
 from .base import AnalysisContext, ResearchBundle
-from .pipeline import pipeline_for
+from .pipeline import execution_levels, pipeline_for
 
 ProgressCallback = Callable[[str, str, dict[str, Any]], None]
 
@@ -107,8 +107,11 @@ class AnalysisOrchestrator:
             )
 
             agents = pipeline_for(request.depth)
+            levels = execution_levels(agents)
             total = len(agents)
-            for index, agent_cls in enumerate(agents, start=1):
+            completed = 0
+
+            for level in levels:
                 if cancel_event is not None and cancel_event.is_set():
                     repo.update_analysis_progress(
                         conn,
@@ -120,19 +123,25 @@ class AnalysisOrchestrator:
                     notify("cancelled", "Analysis cancelled")
                     return {"status": AnalysisStatus.CANCELLED.value}
 
-                agent = agent_cls()
+                instances = [agent_cls() for agent_cls in level]
                 repo.update_analysis_progress(
                     conn,
                     request.analysis_id,
-                    progress=0.15 + 0.8 * (index - 1) / total,
-                    stage=agent.title,
+                    progress=0.15 + 0.8 * completed / total,
+                    stage=" + ".join(a.title for a in instances[:3]),
                 )
-                result = agent.run(ctx)
-                if result is None:
-                    failed_agents.append(agent.name)
-                else:
-                    # Progressive disclosure: tell the UI this section is ready.
-                    notify("section_ready", agent.title, {"agent": agent.name})
+
+                for agent, result in self._run_level(ctx, instances):
+                    completed += 1
+                    if result is None:
+                        failed_agents.append(agent.name)
+                    else:
+                        # Progressive disclosure: tell the UI this section is ready.
+                        notify("section_ready", agent.title, {"agent": agent.name})
+
+                repo.update_analysis_progress(
+                    conn, request.analysis_id, progress=0.15 + 0.8 * completed / total
+                )
 
             status = (
                 AnalysisStatus.PARTIAL.value
@@ -166,6 +175,40 @@ class AnalysisOrchestrator:
             )
             notify("failed", f"Analysis failed: {exc}", {"trace": traceback.format_exc()[:2000]})
             raise
+
+    def _run_level(self, ctx: AnalysisContext, agents: list[Any]):
+        """Run one dependency level, concurrently when it holds more than one.
+
+        Each worker gets its own sqlite connection - connections are thread-local
+        and are not safe to share - and its own AnalysisContext view. Results are
+        merged back into the shared context afterwards so later levels can read
+        them, which is safe because merging happens on this thread only.
+        """
+        if len(agents) == 1:
+            agent = agents[0]
+            return [(agent, agent.run(ctx))]
+
+        import copy
+        from concurrent.futures import ThreadPoolExecutor
+
+        def run_one(agent):
+            # A per-thread connection; WAL mode allows the concurrent writes.
+            worker_ctx = copy.copy(ctx)
+            worker_ctx.conn = get_connection()
+            worker_ctx.results = dict(ctx.results)
+            return agent, agent.run(worker_ctx)
+
+        with ThreadPoolExecutor(
+            max_workers=min(len(agents), 4), thread_name_prefix="pas-agent"
+        ) as pool:
+            outcomes = list(pool.map(run_one, agents))
+
+        for agent, result in outcomes:
+            if result is not None:
+                ctx.results[agent.name] = result
+            # Model-call budget is shared across the level.
+            ctx.llm_calls += 1
+        return outcomes
 
     # -- research ----------------------------------------------------------
 

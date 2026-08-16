@@ -184,6 +184,12 @@ class RadarAgent(Agent[RadarReport]):
     contract = RadarReport
     deep = True
     max_tokens = 9000
+    requires = (
+        "scoring",
+        "gap_analysis",
+        "competitive_intelligence",
+        "market_analyst",
+    )
 
     def build_prompt(self, ctx: AnalysisContext) -> str:
         conn, analysis_id = ctx.conn, ctx.analysis_id
