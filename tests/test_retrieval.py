@@ -612,3 +612,58 @@ def test_cost_formatting_never_shows_a_real_cost_as_zero(value, expected):
     from pas.ui.components import format_cost
 
     assert format_cost(value) == expected
+
+
+# ---------------------------------------------------------------------------
+# Domain colour system
+# ---------------------------------------------------------------------------
+
+
+def test_every_route_has_a_domain():
+    """A route with no domain would silently fall back to the default colour."""
+    from pas.ui.app import ROUTES, ROUTE_DOMAIN
+
+    missing = set(ROUTES) - set(ROUTE_DOMAIN)
+    assert not missing, f"routes with no workflow domain: {sorted(missing)}"
+
+
+def test_domain_names_match_the_palette():
+    from pas.ui.app import NAV_GROUPS
+    from pas.ui.theme import DOMAINS
+
+    assert {group for group, _ in NAV_GROUPS} == set(DOMAINS)
+
+
+def test_domain_colours_are_distinguishable():
+    """Blue and violet were rejected for being ΔE 11.5 apart; guard the fix."""
+    from pas.ui.theme import DOMAINS
+
+    colours = [c for name, c in DOMAINS.items() if name != "System"]
+    assert len(set(colours)) == len(colours), "two domains share a colour"
+
+    # Crude channel-distance check: a stand-in for the validator, enough to
+    # catch someone quietly swapping in a near-identical hue.
+    def rgb(h):
+        h = h.lstrip("#")
+        return tuple(int(h[i : i + 2], 16) for i in (0, 2, 4))
+
+    for i, a in enumerate(colours):
+        for b in colours[i + 1 :]:
+            distance = sum(abs(x - y) for x, y in zip(rgb(a), rgb(b)))
+            assert distance > 120, f"{a} and {b} are too close (channel sum {distance})"
+
+
+def test_domain_colours_meet_contrast_on_the_plane():
+    from pas.ui.theme import DOMAINS
+
+    for name, colour in DOMAINS.items():
+        ratio = contrast_ratio(colour, BACKGROUND)
+        assert ratio >= 3.0, f"domain '{name}' contrast {ratio:.2f} too low"
+
+
+def test_chart_series_are_unique_and_readable():
+    from pas.ui.theme import SERIES
+
+    assert len(set(SERIES)) == len(SERIES), "a series colour is duplicated"
+    for colour in SERIES:
+        assert contrast_ratio(colour, BACKGROUND) >= 3.0, colour

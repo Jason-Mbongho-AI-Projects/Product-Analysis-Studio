@@ -87,6 +87,17 @@ NAV_GROUPS: list[tuple[str, list[str]]] = [
     ("System", ["account", "diagnostics"]),
 ]
 
+#: route -> workflow domain, derived from the grouping above so the two cannot
+#: drift apart.
+ROUTE_DOMAIN: dict[str, str] = {
+    route: group for group, routes in NAV_GROUPS for route in routes
+}
+
+
+def domain_colour(route: str) -> str:
+    """The colour for a route's workflow domain."""
+    return theme.DOMAINS.get(ROUTE_DOMAIN.get(route, ""), theme.DEFAULT_DOMAIN)
+
 
 @st.cache_resource(show_spinner=False)
 def _base_service() -> StudioService:
@@ -164,9 +175,9 @@ def _sidebar(service: StudioService, product: dict | None) -> str:
             if not available:
                 continue
             st.markdown(
-                f"<div style='font-size:0.64rem;letter-spacing:0.12em;"
-                f"text-transform:uppercase;color:#626d7d;font-weight:650;"
-                f"margin:1rem 0 0.35rem'>{group_name}</div>",
+                f"<div class='nav-group' style='color:"
+                f"{theme.DOMAINS.get(group_name, theme.PALETTE['muted'])}'>"
+                f"{group_name}</div>",
                 unsafe_allow_html=True,
             )
             for key in available:
@@ -390,6 +401,10 @@ def main() -> None:
         # The product was deleted, or belongs to a workspace this user left.
         st.session_state["active_product"] = None
         st.session_state["active_analysis"] = None
+
+    # Set before the sidebar renders so the active nav item, the page rule and
+    # the selected tab all pick up the same domain colour.
+    theme.set_domain(domain_colour(st.session_state.get("route", "intake")))
 
     route = _sidebar(service, product)
     st.session_state["route"] = route

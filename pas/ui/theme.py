@@ -14,9 +14,13 @@ The design decisions that matter:
 * **Hairline borders at low alpha, not solid rules.** Structure comes from
   luminance steps and spacing; visible boxes everywhere read as a form, not a
   dashboard.
-* **One accent, used sparingly.** Blue marks what is interactive or current.
-  Everything else that carries colour carries *meaning* - status, severity,
-  evidence grade - so a coloured element is always informative.
+* **Colour always means something.** Three uses, and no others: the workflow
+  domain (where you are), status (evidence grade, severity, score band), and
+  data series. There is no decorative colour anywhere.
+* **Wayfinding takes the domain colour; controls keep the neutral accent.**
+  The current section, its page rule and its tab indicator follow the domain,
+  while buttons and toggles stay blue - so an orange section never grows an
+  orange primary button that reads as a warning.
 * **Tabular figures for numbers.** Stat values and table columns align
   vertically instead of shifting as digits change.
 """
@@ -58,8 +62,22 @@ PALETTE = {
     "violet": "#a78bfa",
 }
 
-#: Validated categorical slots, fixed order, never cycled.
-SERIES = ["#4b8bf5", "#e0693a", "#1faa7c", "#d29922", "#d55181", "#a78bfa"]
+#: Validated categorical slots, fixed order, never cycled. All six clear the
+#: lightness band, chroma floor, CVD separation and contrast on this surface.
+SERIES = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#9085e9"]
+
+#: Workflow domains. Colour here encodes *where you are* - it is navigation
+#: feedback, not decoration. These three clear every gate on the all-pairs
+#: list, which matters because they appear far apart on screen rather than
+#: side by side. Blue and violet were the obvious first choice and were
+#: rejected: ΔE 11.5 apart to normal vision, 3.0 under protanopia.
+DOMAINS = {
+    "Analyse": "#3987e5",
+    "Strategise": "#d95926",
+    "Act": "#199e70",
+    "System": "#8b8b94",
+}
+DEFAULT_DOMAIN = "#3987e5"
 
 #: Evidence grade is a status ladder, so it borrows status-family colours:
 #: verified reads as good, hypothesis reads as caution.
@@ -154,15 +172,21 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stSidebar"] {
 }
 /* Current route: a soft wash and an accent rule, not a saturated fill. */
 [data-testid="stSidebar"] .stButton > button[kind="primary"] {
-    background: var(--primary-soft);
+    background: var(--domain-soft, var(--primary-soft));
     color: var(--text);
     border: 1px solid transparent;
-    border-left: 2px solid var(--primary);
+    border-left: 2px solid var(--domain, var(--primary));
     border-radius: 3px var(--radius) var(--radius) 3px;
     font-weight: 600;
 }
 [data-testid="stSidebar"] .stButton > button[kind="primary"]:hover {
-    background: var(--primary-soft);
+    background: var(--domain-soft, var(--primary-soft));
+}
+
+/* Group label, tinted by domain. */
+.nav-group {
+    font-size: 0.635rem; letter-spacing: 0.12em; text-transform: uppercase;
+    font-weight: 680; margin: 1.15rem 0 0.4rem 0.15rem;
 }
 [data-testid="stSidebar"] .stButton > button:disabled {
     color: #4d4d55; background: transparent;
@@ -184,6 +208,12 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stSidebar"] {
 }
 
 .page-head { margin: 0 0 1.4rem 0; }
+/* A short rule in the page's domain colour: enough to identify where you are
+   at a glance, without tinting the content itself. */
+.page-head::before {
+    content: ""; display: block; width: 28px; height: 3px; border-radius: 2px;
+    background: var(--domain, var(--primary)); margin-bottom: 0.7rem;
+}
 .page-head .name {
     font-size: 1.22rem; font-weight: 640; letter-spacing: -0.022em; color: var(--text);
 }
@@ -200,7 +230,7 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stSidebar"] {
     max-width: 84ch;
     margin: 0.45rem 0 1.5rem 0;
     padding-left: 0.8rem;
-    border-left: 2px solid var(--line-strong);
+    border-left: 2px solid var(--domain-soft, var(--line-strong));
 }
 
 .panel {
@@ -323,6 +353,12 @@ textarea:focus-visible, [role="tab"]:focus-visible {
 }
 [data-baseweb="tab"]:hover { color: var(--text-2); }
 [aria-selected="true"][role="tab"] { color: var(--text) !important; font-weight: 600; }
+/* The selected-tab underline. Streamlit renders this with react-aria, not
+   baseweb - the obvious [data-baseweb="tab-highlight"] selector matches
+   nothing, so the indicator stayed blue on every domain. */
+.react-aria-SelectionIndicator {
+    background: var(--domain, var(--primary)) !important;
+}
 
 /* ---- Type ---- */
 .stMarkdown { line-height: 1.65; font-size: 0.925rem; }
@@ -363,6 +399,20 @@ _CSS = _STYLES.replace("/*VARS*/", _VARIABLES)
 def inject() -> None:
     """Apply the stylesheet once per page render."""
     st.markdown(_CSS, unsafe_allow_html=True)
+
+
+def set_domain(colour: str) -> None:
+    """Tint the current screen with its workflow domain colour.
+
+    Applied as a CSS variable so the page header rule, the selected tab and
+    focus states all follow the domain without every component needing to know
+    about it.
+    """
+    st.markdown(
+        f"<style>:root {{ --domain: {colour}; "
+        f"--domain-soft: color-mix(in srgb, {colour} 15%, transparent); }}</style>",
+        unsafe_allow_html=True,
+    )
 
 
 def score_colour(value: float) -> str:
