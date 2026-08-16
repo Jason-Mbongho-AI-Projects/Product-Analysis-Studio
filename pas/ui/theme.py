@@ -232,44 +232,60 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stSidebar"] {
     border-color: transparent;
 }
 
-/* Raised-relief brand type. The face carries a top-lit gradient (bright at the
-   cap line, cooling toward the baseline) and the depth comes from a stack of
-   hard drop-shadows.
+/* Extruded brand type - a solid object lit from the upper left, not text with a
+   shadow under it. Three things together are what make it read as dimensional:
 
-   Each drop-shadow in a filter chain is applied to the *output* of the previous
-   one, so the offsets compound: uniform 1px steps build one solid 5px side face,
-   whereas 1/2/3px would land at 1/3/6px and leave gaps that read as a blurred
-   shadow. The ramp darkens down the stack so the extrusion turns away from the
-   light, and it is navy rather than black so it sits in the slate palette
-   instead of punching a hole through it. `color` is set first as the fallback:
-   if background-clip:text is unsupported the name renders white, never invisible.
+   1. The extrusion runs DIAGONALLY (down and right). A straight-down offset is
+      what a drop shadow does, so however deep it goes it keeps reading as a
+      shadow; offsetting on both axes puts a visible side face on the letters.
+   2. It is DEEP - about a third of the cap height. The earlier 5px on a ~37px
+      cap was a seventh, which at 100% just looked like a soft shadow.
+   3. The face is lit on the SAME axis, bright at the upper left and cooling to
+      the lower right, so the light direction agrees with the geometry.
+
+   Each drop-shadow in a filter chain applies to the *output* of the previous
+   one, so the offsets compound: eight uniform 1px/1px steps build one solid
+   unbroken side face 8px along the diagonal. Non-uniform steps (1/2/3px) would
+   land at 1/3/6px and leave gaps. The ramp darkens down the stack so the face
+   turns away from the light, and stays navy rather than black so it sits in the
+   slate palette instead of punching a hole through it.
+
+   `color` is set first as the fallback: if background-clip:text is unsupported
+   the name renders solid white, never invisible.
 */
 .brand-3d {
     color: #ffffff;
-    background: linear-gradient(180deg, #ffffff 0%, #edf2f9 40%, #c2cfe3 100%);
+    background: linear-gradient(135deg, #ffffff 0%, #eaf0f8 38%, #b4c4dc 100%);
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
     filter:
-        drop-shadow(0 1px 0 #2b3242)
-        drop-shadow(0 1px 0 #252c3a)
-        drop-shadow(0 1px 0 #1f2532)
-        drop-shadow(0 1px 0 #191e29)
-        drop-shadow(0 1px 0 #141821)
-        drop-shadow(0 5px 8px rgba(0, 0, 0, 0.42));
-    padding-bottom: 0.14em;
+        drop-shadow(1px 1px 0 #39445a)
+        drop-shadow(1px 1px 0 #333d51)
+        drop-shadow(1px 1px 0 #2d3648)
+        drop-shadow(1px 1px 0 #272f3f)
+        drop-shadow(1px 1px 0 #212836)
+        drop-shadow(1px 1px 0 #1b212d)
+        drop-shadow(1px 1px 0 #161b24)
+        drop-shadow(1px 1px 0 #11151c)
+        drop-shadow(3px 7px 9px rgba(0, 0, 0, 0.45));
+    padding-right: 0.1em;
+    padding-bottom: 0.16em;
 }
 
-/* The sidebar mark is a sixth of the hero's size, so it takes a proportionally
-   shallower extrusion. Depth has to stay a roughly constant *fraction* of the
-   cap height or it stops reading as the same object: the hero's 5px on ~35px is
-   about a seventh, so 1px on ~12px here matches. Two steps at this size read as
-   a ghosted second copy of the name rather than a side face. */
+/* The sidebar mark is a third of the hero's size and takes the same diagonal
+   extrusion, scaled down. Depth cannot stay a constant fraction of cap height
+   here: the hero's third would be ~4px on a ~13px cap, which closes the
+   counters of a, e and o and turns the name into a smudge. Two steps is what
+   this size carries, so it reads as the same object rendered smaller rather
+   than as a different treatment. */
 .brand-mark.brand-3d {
     filter:
-        drop-shadow(0 1px 0 #1d2431)
-        drop-shadow(0 1px 3px rgba(0, 0, 0, 0.34));
-    padding-bottom: 0.08em;
+        drop-shadow(1px 1px 0 #2b3446)
+        drop-shadow(1px 1px 0 #1b212c)
+        drop-shadow(1px 2px 4px rgba(0, 0, 0, 0.4));
+    padding-right: 0.06em;
+    padding-bottom: 0.1em;
 }
 
 /* ---- Page header ---- */

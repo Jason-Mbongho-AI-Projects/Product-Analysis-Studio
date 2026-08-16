@@ -493,6 +493,10 @@ def test_brand_relief_has_a_paint_fallback_and_an_unbroken_extrusion():
     one, so the offsets compound. Uniform 1px steps build one solid side face;
     1/2/3px lands at 1/3/6px and leaves gaps that read as a blurred shadow
     rather than depth. Guard the uniformity, not the count.
+
+    The steps must also be diagonal. A purely vertical offset is what a drop
+    shadow does, so however deep the stack goes it keeps reading as a shadow
+    rather than as a side face on a solid object.
     """
     from pas.ui.theme import _CSS
 
@@ -503,9 +507,11 @@ def test_brand_relief_has_a_paint_fallback_and_an_unbroken_extrusion():
         "-webkit-text-fill-color"
     ), "fallback colour must be declared before the transparent fill"
 
-    hard_steps = re.findall(r"drop-shadow\(0 (\d+)px 0 ", block)
-    assert len(hard_steps) >= 2, "relief needs a stack of hard shadows"
-    assert set(hard_steps) == {"1"}, f"offsets compound; keep them uniform: {hard_steps}"
+    hard_steps = re.findall(r"drop-shadow\((\d+)px (\d+)px 0 ", block)
+    assert len(hard_steps) >= 4, "the extrusion needs a stack of hard shadows"
+    assert set(hard_steps) == {("1", "1")}, (
+        f"offsets compound, so keep every step a uniform 1px/1px diagonal: {hard_steps}"
+    )
 
 
 def test_stylesheet_does_not_force_unreadable_input_text():
