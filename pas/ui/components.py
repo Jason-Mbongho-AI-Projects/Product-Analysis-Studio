@@ -30,6 +30,37 @@ def esc(value: Any) -> str:
     return html.escape(str(value if value is not None else ""), quote=True)
 
 
+def format_cost(value: float | None) -> str:
+    """Render a spend figure without flattening small amounts to zero.
+
+    Rounding $0.00002 to four places prints "$0.0000", which reads as free.
+    Anything non-zero below the display precision is shown as a bound instead.
+    """
+    amount = float(value or 0)
+    if amount <= 0:
+        return "$0.00"
+    if amount < 0.0001:
+        return "<$0.0001"
+    if amount < 1:
+        return f"${amount:.4f}"
+    return f"${amount:,.2f}"
+
+
+def truncate(text: str, limit: int = 40) -> str:
+    """Shorten to a word boundary rather than mid-word.
+
+    A hard slice produced labels like "Dominance of Corn and Soybea", which
+    reads as a rendering fault rather than a deliberate abbreviation.
+    """
+    text = (text or "").strip()
+    if len(text) <= limit:
+        return text
+    cut = text[: limit - 1]
+    if " " in cut:
+        cut = cut[: cut.rindex(" ")]
+    return cut.rstrip(" ,.;:-") + "\u2026"
+
+
 def page_header(name: str, purpose: str) -> None:
     """Name the screen and say what question it answers.
 

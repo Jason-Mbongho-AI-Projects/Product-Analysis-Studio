@@ -36,10 +36,7 @@ def render(service: StudioService, product: dict, analysis_id: str | None) -> No
             icon=":material/warning:",
         )
 
-    st.caption(
-        "Every report carries an evidence-basis section stating how well-supported "
-        "its findings are. Download as Markdown, or as HTML and print to PDF."
-    )
+    st.caption("Download as Markdown, or as HTML and print to PDF.")
 
     for report_id, (label, _builder) in report_lib.REPORTS.items():
         with st.container(border=True):

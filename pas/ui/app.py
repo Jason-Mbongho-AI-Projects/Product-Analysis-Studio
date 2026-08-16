@@ -14,7 +14,7 @@ from ..auth.models import Identity, Permission, PermissionDenied
 from ..config import load_config, network_exposure_warning
 from ..service import StudioService
 from . import theme
-from .components import esc, kpi
+from .components import esc, format_cost, kpi
 from .pages import (
     alerts,
     ask,
@@ -293,8 +293,22 @@ def _diagnostics(service: StudioService) -> None:
         st.markdown("#### Spend by model")
         import pandas as pd
 
+        # Formatted rather than raw floats: the tile above says "$0.1224", so an
+        # unformatted 0.1224 in the table reads as a different quantity.
         st.dataframe(
-            pd.DataFrame(usage["by_model"]), width="stretch", hide_index=True
+            pd.DataFrame(
+                [
+                    {
+                        "Model": row["model"],
+                        "Calls": f"{int(row['calls'] or 0):,}",
+                        "Tokens": f"{int(row['tokens'] or 0):,}",
+                        "Cost": format_cost(row["cost"]),
+                    }
+                    for row in usage["by_model"]
+                ]
+            ),
+            width="stretch",
+            hide_index=True,
         )
 
     jobs = _active_jobs()

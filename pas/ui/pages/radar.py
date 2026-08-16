@@ -9,7 +9,16 @@ import streamlit as st
 
 from ...domain.enums import TimeHorizon
 from ...service import StudioService
-from ..components import chip, empty_state, esc, kpi, lead, meter, page_header
+from ..components import (
+    chip,
+    empty_state,
+    esc,
+    kpi,
+    lead,
+    meter,
+    page_header,
+    truncate,
+)
 from ..theme import PALETTE, score_colour
 
 SUGGESTED_SCENARIOS = [
@@ -81,28 +90,32 @@ def _radar(service: StudioService, analysis_id: str | None, key: str, kind: str)
         kpi("High priority", str(len(high)), "impact x probability >= 50")
     with cols[3]:
         top = signals[0]
-        kpi("Top ranked", f"{top['priority_score']:.0f}", top["title"][:28])
+        kpi("Top ranked", f"{top['priority_score']:.0f}", truncate(top["title"], 34))
 
     st.markdown("#### Impact vs probability")
     st.caption(
         "Ranked by expected value (impact x probability), so a catastrophic but "
         "unlikely signal does not outrank a moderate but near-certain one."
     )
+    # A single series in the accent colour, not one colour per signal: colouring
+    # by entity hands Streamlit an uncontrolled categorical palette and produces
+    # as many "series" as there are points, none of which carries meaning. The
+    # ranked list below is what identifies each signal.
     st.scatter_chart(
         pd.DataFrame(
             [
-                {
-                    "Probability": s["probability"],
-                    "Impact": s["impact"],
-                    "Signal": s["title"][:40],
-                }
+                {"Probability": s["probability"], "Impact": s["impact"]}
                 for s in signals
             ]
         ),
         x="Probability",
         y="Impact",
-        color="Signal",
-        height=380,
+        color=accent,
+        height=340,
+    )
+    st.caption(
+        "Top right is most urgent: high impact and high probability. Each point is "
+        "named in the ranked list below."
     )
 
     st.markdown(f"#### Ranked {kind}s")

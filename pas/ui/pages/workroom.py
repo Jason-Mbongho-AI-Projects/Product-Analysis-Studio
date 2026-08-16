@@ -887,7 +887,9 @@ def render_board(service: StudioService, data: dict[str, Any]) -> None:
                     for item in rec["supporting_evidence"]:
                         st.markdown(f"- {esc(item)}")
 
-            actions = st.columns(4)
+            # Weighted columns so the actions cluster at the left instead of
+            # spreading across the full width of a wide screen.
+            actions = st.columns([1.4, 1, 1.2, 1, 4])
             if actions[0].button("Accept → roadmap", key=f"acc_{rec['id']}", type="primary"):
                 service.accept_to_roadmap(rec["id"])
                 st.rerun()

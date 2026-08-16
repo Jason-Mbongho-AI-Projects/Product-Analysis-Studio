@@ -428,10 +428,6 @@ def _gtm(gtm: dict[str, Any] | None) -> None:
 
 def _simulator(service: StudioService, product: dict, analysis_id: str) -> None:
     st.markdown("#### Pricing & growth simulation")
-    st.caption(
-        "Every figure below is computed from the inputs on this page. "
-        "These are projections under stated assumptions, not predictions."
-    )
 
     pricing = service.dashboard(analysis_id).get("pricing")
     seeded = bool(pricing and pricing.get("economics"))

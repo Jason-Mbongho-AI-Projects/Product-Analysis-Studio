@@ -554,3 +554,61 @@ def test_default_providers_respects_the_deep_flag():
     shallow = default_providers("https://example.com", deep=False)
     deep = default_providers("https://example.com", deep=True)
     assert len(deep) > len(shallow)
+
+
+# ---------------------------------------------------------------------------
+# Text truncation (UI)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "text,limit,expected",
+    [
+        ("Short label", 40, "Short label"),
+        ("", 20, ""),
+        ("Dominance of Corn and Soybean Production", 34, "Dominance of Corn and Soybean…"),
+        # Must not cut mid-word.
+        ("Competitive pressure from incumbents", 20, "Competitive…"),
+        # Trailing punctuation is trimmed before the ellipsis.
+        ("One two three, four five", 15, "One two…"),
+    ],
+)
+def test_truncate_respects_word_boundaries(text, limit, expected):
+    """A hard slice produced labels like 'Soybea', which reads as a bug."""
+    from pas.ui.components import truncate
+
+    assert truncate(text, limit) == expected
+
+
+def test_truncate_never_exceeds_the_limit():
+    from pas.ui.components import truncate
+
+    for length in range(5, 60):
+        result = truncate("The quick brown fox jumps over the lazy dog", length)
+        assert len(result) <= length, f"limit {length} produced {len(result)} chars"
+
+
+def test_truncate_handles_a_single_long_word():
+    from pas.ui.components import truncate
+
+    result = truncate("Supercalifragilisticexpialidocious", 12)
+    assert len(result) <= 12
+
+
+@pytest.mark.parametrize(
+    "value,expected",
+    [
+        (0, "$0.00"),
+        (None, "$0.00"),
+        # A real but tiny cost must not read as free.
+        (0.00002, "<$0.0001"),
+        (0.0001, "$0.0001"),
+        (0.1224, "$0.1224"),
+        (12.5, "$12.50"),
+        (1234.5, "$1,234.50"),
+    ],
+)
+def test_cost_formatting_never_shows_a_real_cost_as_zero(value, expected):
+    from pas.ui.components import format_cost
+
+    assert format_cost(value) == expected

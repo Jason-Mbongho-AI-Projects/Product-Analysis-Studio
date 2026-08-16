@@ -140,11 +140,6 @@ def _alert_centre(service: StudioService, product: dict) -> None:
 
 
 def _monitors(service: StudioService, product: dict, analysis_id: str | None) -> None:
-    st.caption(
-        "Monitors re-check pages on a schedule. A page is only sent to the model "
-        "when its content actually changed, so routine checks cost nothing."
-    )
-
     suggestions: list[str] = []
     if analysis_id:
         for competitor in service.dashboard(analysis_id)["competitors"]:
