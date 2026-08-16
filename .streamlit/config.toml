@@ -10,13 +10,13 @@
 
 [theme]
 base = "dark"
-primaryColor = "#3987e5"
-backgroundColor = "#0d0f13"
-secondaryBackgroundColor = "#14171c"
-textColor = "#f0f2f5"
-linkColor = "#3987e5"
-codeBackgroundColor = "#0f1216"
-borderColor = "#262b34"
+primaryColor = "#4b8bf5"
+backgroundColor = "#0b0c0e"
+secondaryBackgroundColor = "#111214"
+textColor = "#ededf0"
+linkColor = "#4b8bf5"
+codeBackgroundColor = "#17181b"
+borderColor = "#1e1f23"
 font = "sans-serif"
 
 [server]

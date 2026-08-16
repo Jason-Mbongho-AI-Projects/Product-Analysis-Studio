@@ -1,21 +1,24 @@
 """Visual identity.
 
-Rebuilt around a **validated** palette rather than a chosen-by-eye one. The
-categorical chart slots were run through the data-viz validator against this
-surface and clear every gate: lightness band, chroma floor, colour-vision
-separation, normal-vision separation and contrast.
+A restrained, neutral dark system. Every colour is measured rather than chosen
+by eye: the chart series clear the data-viz validator against this surface
+(lightness band, chroma floor, colour-vision separation ΔE 9.0, normal-vision
+ΔE 25.8, contrast), and every UI and status colour clears WCAG AA at 4.5:1 -
+not merely the 3:1 large-text floor.
 
-What changed from the previous look, and why:
+The design decisions that matter:
 
-* The purple/cyan gradient wash read as generic-AI-startup. The spec asks for
-  "modern, clean, serious, executive" and explicitly warns off excessive
-  gradients. Gradients are now confined to the hero, at low opacity.
-* One accent (blue) instead of a purple/cyan duo. A single accent makes the
-  status colours mean something; two decorative accents compete with them.
-* Status colours are reserved. Green/amber/orange/red carry evidence grade and
-  severity only, never decoration - so a red chip always means the same thing.
-* The base plane is a near-black with a slight cool cast rather than saturated
-  navy, so dense tables and charts sit on a neutral ground.
+* **Neutral greys, not blue-tinted navy.** A coloured ground fights the data
+  sitting on it. The plane is near-black and the surfaces step up in small,
+  even increments.
+* **Hairline borders at low alpha, not solid rules.** Structure comes from
+  luminance steps and spacing; visible boxes everywhere read as a form, not a
+  dashboard.
+* **One accent, used sparingly.** Blue marks what is interactive or current.
+  Everything else that carries colour carries *meaning* - status, severity,
+  evidence grade - so a coloured element is always informative.
+* **Tabular figures for numbers.** Stat values and table columns align
+  vertically instead of shifting as digits change.
 """
 
 from __future__ import annotations
@@ -27,68 +30,69 @@ import streamlit as st
 # ---------------------------------------------------------------------------
 
 PALETTE = {
-    # Surfaces, darkest to lightest.
-    "plane": "#0d0f13",
-    "bg_1": "#0d0f13",
-    "bg_2": "#111419",
-    "surface": "#14171c",
-    "surface_raised": "#1a1e25",
-    "line": "#262b34",
-    "line_strong": "#333a45",
+    # Surfaces: even luminance steps, neutral hue.
+    "plane": "#0b0c0e",
+    "bg_1": "#0b0c0e",
+    "bg_2": "#0e0f12",
+    "surface": "#111214",
+    "surface_raised": "#17181b",
+    "surface_hover": "#1c1d21",
+    # Borders are alpha so they sit correctly on any surface beneath them.
+    "line": "rgba(255,255,255,0.055)",
+    "line_strong": "rgba(255,255,255,0.10)",
     # Ink.
-    "text": "#f0f2f5",
-    "text_secondary": "#b4bcc8",
-    "muted": "#7c8797",
+    "text": "#ededf0",
+    "text_secondary": "#a1a1aa",
+    "muted": "#8b8b94",
     # One accent.
-    "primary": "#3987e5",
-    "primary_hover": "#5598e7",
-    "primary_2": "#3987e5",
+    "primary": "#4b8bf5",
+    "primary_hover": "#6b9ff7",
+    "primary_soft": "rgba(75,139,245,0.14)",
+    "primary_2": "#4b8bf5",
     # Status - reserved, never decorative.
-    "success": "#2ea043",
-    "accent": "#d7a02a",
-    "warning": "#d7a02a",
-    "serious": "#e07a4f",
-    "danger": "#e0524f",
+    "success": "#3fb950",
+    "accent": "#d29922",
+    "warning": "#d29922",
+    "serious": "#e08c50",
+    "danger": "#f0605d",
+    "violet": "#a78bfa",
 }
 
-#: Validated categorical slots, in fixed order. Never cycled: a ninth series
-#: folds into "Other" rather than inventing a hue.
-SERIES = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#9085e9"]
+#: Validated categorical slots, fixed order, never cycled.
+SERIES = ["#4b8bf5", "#e0693a", "#1faa7c", "#d29922", "#d55181", "#a78bfa"]
 
-#: Evidence grade is a status ladder, not a set of identities, so it uses
-#: status-family colours: verified reads as good, hypothesis reads as caution.
+#: Evidence grade is a status ladder, so it borrows status-family colours:
+#: verified reads as good, hypothesis reads as caution.
 GRADE_STYLES = {
-    "verified_fact": ("Verified", "#2ea043"),
-    "strong_inference": ("Strong inference", "#3987e5"),
-    "user_supplied": ("You told us", "#9085e9"),
-    "weak_inference": ("Weak inference", "#d7a02a"),
-    "ai_hypothesis": ("AI hypothesis", "#e07a4f"),
+    "verified_fact": ("Verified", "#3fb950"),
+    "strong_inference": ("Strong inference", "#4b8bf5"),
+    "user_supplied": ("You told us", "#a78bfa"),
+    "weak_inference": ("Weak inference", "#d29922"),
+    "ai_hypothesis": ("AI hypothesis", "#e08c50"),
 }
 
 VERDICT_STYLES = {
-    "must_build": ("MUST BUILD", "#e0524f"),
-    "should_build": ("SHOULD BUILD", "#d7a02a"),
-    "could_build": ("COULD BUILD", "#3987e5"),
-    "do_not_build": ("DO NOT BUILD", "#8b95a5"),
-    "investigate_first": ("INVESTIGATE FIRST", "#9085e9"),
+    "must_build": ("Must build", "#f0605d"),
+    "should_build": ("Should build", "#d29922"),
+    "could_build": ("Could build", "#4b8bf5"),
+    "do_not_build": ("Do not build", "#8b8b94"),
+    "investigate_first": ("Investigate first", "#a78bfa"),
 }
 
 THREAT_STYLES = {
-    "critical": "#e0524f",
-    "high": "#e07a4f",
-    "medium": "#d7a02a",
-    "low": "#2ea043",
+    "critical": "#f0605d",
+    "high": "#e08c50",
+    "medium": "#d29922",
+    "low": "#3fb950",
 }
 
-#: CSS custom properties, generated from PALETTE so the palette has exactly one
-#: definition. Built separately from the stylesheet because CSS contains literal
-#: `%` values, which would collide with %-formatting.
 _VARIABLES = "\n".join(
     f"    --{name}: {PALETTE[key]};"
     for name, key in [
         ("plane", "plane"),
         ("surface", "surface"),
         ("surface-raised", "surface_raised"),
+        ("surface-hover", "surface_hover"),
         ("line", "line"),
         ("line-strong", "line_strong"),
         ("text", "text"),
@@ -96,6 +100,7 @@ _VARIABLES = "\n".join(
         ("muted", "muted"),
         ("primary", "primary"),
         ("primary-hover", "primary_hover"),
+        ("primary-soft", "primary_soft"),
         ("success", "success"),
         ("warning", "warning"),
         ("danger", "danger"),
@@ -106,155 +111,193 @@ _STYLES = """
 <style>
 :root {
 /*VARS*/
+    --radius: 8px;
+    --radius-lg: 10px;
+    --font: -apple-system, "Segoe UI Variable Text", "Segoe UI", system-ui,
+            "Helvetica Neue", Arial, sans-serif;
 }
 
-html, body, [data-testid="stAppViewContainer"] {
+html, body, [data-testid="stAppViewContainer"], [data-testid="stSidebar"] {
     background: var(--plane);
     color: var(--text);
-    font-feature-settings: "cv02", "cv03", "cv04";
+    font-family: var(--font);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
 }
 
-/* Streamlit's toolbar is fixed to the top, so the first element needs
-   clearance or it renders underneath it. */
-.block-container { padding-top: 3.25rem; padding-bottom: 4rem; max-width: 1440px; }
+.block-container {
+    padding-top: 3.25rem; padding-bottom: 5rem; max-width: 1400px;
+}
 
+/* ---- Sidebar: compact, quiet, with a clear current item ---- */
 [data-testid="stSidebar"] {
-    background: #0a0c10;
     border-right: 1px solid var(--line);
+    background: #090a0c;
 }
 [data-testid="stSidebar"] .block-container { padding-top: 1.5rem; }
 
-/* ---- Hero: the one place a gradient is allowed, and kept subtle ---- */
-.hero {
-    background:
-        linear-gradient(135deg, rgba(57,133,229,0.10), rgba(57,133,229,0.02) 60%),
-        var(--surface);
-    border: 1px solid var(--line);
-    border-radius: 12px;
-    padding: 1.6rem 1.75rem;
-    margin-bottom: 1.5rem;
+[data-testid="stSidebar"] .stButton > button {
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--text-2);
+    font-weight: 500;
+    font-size: 0.855rem;
+    text-align: left;
+    justify-content: flex-start;
+    padding: 0.4rem 0.7rem;
+    border-radius: var(--radius);
+    min-height: 0;
+    transition: background .12s ease, color .12s ease;
 }
+[data-testid="stSidebar"] .stButton > button:hover {
+    background: var(--surface-hover); color: var(--text); border-color: transparent;
+}
+/* Current route: a soft wash and an accent rule, not a saturated fill. */
+[data-testid="stSidebar"] .stButton > button[kind="primary"] {
+    background: var(--primary-soft);
+    color: var(--text);
+    border: 1px solid transparent;
+    border-left: 2px solid var(--primary);
+    border-radius: 3px var(--radius) var(--radius) 3px;
+    font-weight: 600;
+}
+[data-testid="stSidebar"] .stButton > button[kind="primary"]:hover {
+    background: var(--primary-soft);
+}
+[data-testid="stSidebar"] .stButton > button:disabled {
+    color: #4d4d55; background: transparent;
+}
+
+/* ---- Page header ---- */
+.hero { margin: 0 0 1.75rem 0; }
 .hero .title {
-    font-size: clamp(1.6rem, 2.4vw, 2.1rem);
-    font-weight: 700;
-    letter-spacing: -0.025em;
+    font-size: clamp(1.5rem, 2.2vw, 1.9rem);
+    font-weight: 640;
+    letter-spacing: -0.028em;
     color: var(--text);
     line-height: 1.15;
     margin: 0;
 }
 .hero .subtitle {
-    color: var(--text-2);
-    margin-top: 0.5rem;
-    font-size: 0.95rem;
-    max-width: 68ch;
-    line-height: 1.55;
+    color: var(--muted); margin-top: 0.45rem; font-size: 0.9rem;
+    max-width: 70ch; line-height: 1.6;
 }
 
-/* ---- Page header: what this screen is for ---- */
-.page-head { margin: 0 0 1.1rem 0; }
+.page-head { margin: 0 0 1.4rem 0; }
 .page-head .name {
-    font-size: 1.3rem; font-weight: 650; letter-spacing: -0.02em; color: var(--text);
+    font-size: 1.22rem; font-weight: 640; letter-spacing: -0.022em; color: var(--text);
 }
 .page-head .purpose {
-    color: var(--muted); font-size: 0.88rem; margin-top: 0.25rem;
-    max-width: 74ch; line-height: 1.5;
+    color: var(--muted); font-size: 0.865rem; margin-top: 0.3rem;
+    max-width: 76ch; line-height: 1.6;
 }
 
-/* ---- Explanatory lead-in above a tab's content ---- */
+/* ---- Tab lead-in ---- */
 .lead {
-    border-left: 2px solid var(--primary);
-    padding: 0.1rem 0 0.1rem 0.75rem;
-    margin: 0.2rem 0 1.1rem 0;
-    color: var(--text-2);
-    font-size: 0.88rem;
-    line-height: 1.55;
-    max-width: 82ch;
+    color: var(--muted);
+    font-size: 0.865rem;
+    line-height: 1.65;
+    max-width: 84ch;
+    margin: 0.45rem 0 1.5rem 0;
+    padding-left: 0.8rem;
+    border-left: 2px solid var(--line-strong);
 }
 
 .panel {
     background: var(--surface);
     border: 1px solid var(--line);
-    border-radius: 10px;
-    padding: 1rem 1.1rem;
-    margin-bottom: 0.85rem;
+    border-radius: var(--radius-lg);
+    padding: 1.05rem 1.15rem;
+    margin-bottom: 0.8rem;
 }
 .panel h4 {
-    margin: 0 0 0.5rem 0; font-size: 0.72rem; letter-spacing: 0.1em;
-    text-transform: uppercase; color: var(--muted); font-weight: 650;
+    margin: 0 0 0.45rem 0; font-size: 0.7rem; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--muted); font-weight: 600;
 }
 
 /* ---- Stat tile ---- */
-.kpi { display: flex; flex-direction: column; gap: 0.3rem; }
+.kpi { display: flex; flex-direction: column; gap: 0.35rem; }
 .kpi .value {
-    font-size: 1.85rem; font-weight: 680; color: var(--text); line-height: 1.05;
-    letter-spacing: -0.02em;
+    font-size: 1.9rem; font-weight: 640; color: var(--text); line-height: 1;
+    letter-spacing: -0.03em; font-variant-numeric: tabular-nums;
 }
 .kpi .label {
-    font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.1em;
-    color: var(--muted); font-weight: 650;
+    font-size: 0.665rem; text-transform: uppercase; letter-spacing: 0.09em;
+    color: var(--muted); font-weight: 600;
 }
-.kpi .note { font-size: 0.76rem; color: var(--muted); line-height: 1.4; }
+.kpi .note { font-size: 0.755rem; color: var(--muted); line-height: 1.45; }
 
+/* ---- Chips: soft fill, sentence case, no shouting ---- */
 .chip {
-    display: inline-block; padding: 0.13rem 0.5rem; border-radius: 4px;
-    font-size: 0.66rem; font-weight: 650; letter-spacing: 0.05em;
-    text-transform: uppercase; border: 1px solid currentColor;
-    white-space: nowrap; line-height: 1.5;
+    display: inline-block; padding: 0.15rem 0.5rem; border-radius: 5px;
+    font-size: 0.7rem; font-weight: 560; letter-spacing: 0.005em;
+    border: 1px solid transparent;
+    background: color-mix(in srgb, currentColor 14%, transparent);
+    white-space: nowrap; line-height: 1.55;
 }
 
-/* Thin marks, recessive ground. */
 .meter {
-    height: 5px; border-radius: 2px; background: rgba(255,255,255,0.07);
-    overflow: hidden; margin: 0.4rem 0;
+    height: 4px; border-radius: 2px; background: rgba(255,255,255,0.06);
+    overflow: hidden; margin: 0.45rem 0;
 }
 .meter > span { display: block; height: 100%; border-radius: 2px; }
 
 .claim {
     border-left: 2px solid var(--line-strong);
-    padding: 0.1rem 0 0.1rem 0.75rem; margin-bottom: 0.75rem;
+    padding: 0.05rem 0 0.05rem 0.8rem; margin-bottom: 0.85rem;
 }
-.claim .text { color: var(--text); font-size: 0.9rem; line-height: 1.5; }
-.claim .meta { color: var(--muted); font-size: 0.75rem; margin-top: 0.25rem; }
+.claim .text { color: var(--text); font-size: 0.885rem; line-height: 1.6; }
+.claim .meta { color: var(--muted); font-size: 0.74rem; margin-top: 0.3rem; }
 .claim a { color: var(--primary); text-decoration: none; }
 .claim a:hover { text-decoration: underline; }
 
 .empty {
-    border: 1px dashed var(--line-strong); border-radius: 10px; padding: 2rem 1.5rem;
-    text-align: center; color: var(--muted);
+    border: 1px dashed var(--line-strong); border-radius: var(--radius-lg);
+    padding: 2.25rem 1.5rem; text-align: center; color: var(--muted);
+    background: var(--surface);
 }
 
 /* ---- Inputs ---- */
 div[data-testid="stTextInput"] input,
 div[data-testid="stTextArea"] textarea,
-div[data-testid="stNumberInput"] input {
-    background: #0f1216 !important;
+div[data-testid="stNumberInput"] input,
+div[data-baseweb="select"] > div {
+    background: var(--surface) !important;
     color: var(--text) !important;
-    border-radius: 7px;
-    border: 1px solid var(--line) !important;
-    font-size: 0.9rem !important;
+    border-radius: var(--radius) !important;
+    border: 1px solid var(--line-strong) !important;
+    font-size: 0.885rem !important;
+}
+div[data-testid="stTextInput"] input:focus,
+div[data-testid="stTextArea"] textarea:focus {
+    border-color: var(--primary) !important;
 }
 div[data-testid="stTextInput"] input::placeholder,
-div[data-testid="stTextArea"] textarea::placeholder { color: #626d7d !important; }
-label, .stMarkdown label { color: var(--text-2) !important; font-size: 0.86rem; }
+div[data-testid="stTextArea"] textarea::placeholder { color: #5c5c65 !important; }
+label, .stMarkdown label {
+    color: var(--text-2) !important; font-size: 0.83rem; font-weight: 500;
+}
 
+/* ---- Buttons ---- */
 .stButton > button {
-    border-radius: 7px; border: 1px solid var(--line-strong);
-    background: var(--surface-raised); color: var(--text);
-    font-weight: 550; font-size: 0.86rem;
-    transition: border-color .12s ease, background .12s ease;
+    border-radius: var(--radius);
+    border: 1px solid var(--line-strong);
+    background: var(--surface-raised);
+    color: var(--text);
+    font-weight: 520; font-size: 0.855rem;
+    transition: background .12s ease, border-color .12s ease;
 }
 .stButton > button:hover {
-    border-color: var(--primary); background: #1f242c;
+    background: var(--surface-hover); border-color: rgba(255,255,255,0.16);
 }
 .stButton > button[kind="primary"] {
     background: var(--primary); border-color: var(--primary);
-    color: #ffffff; font-weight: 600;
+    color: #ffffff; font-weight: 580;
 }
 .stButton > button[kind="primary"]:hover {
     background: var(--primary-hover); border-color: var(--primary-hover);
 }
 
-/* Visible focus ring for keyboard users. */
 :focus-visible, .stButton > button:focus-visible, input:focus-visible,
 textarea:focus-visible, [role="tab"]:focus-visible {
     outline: 2px solid var(--primary) !important;
@@ -262,41 +305,54 @@ textarea:focus-visible, [role="tab"]:focus-visible {
 }
 
 [data-testid="stExpander"] {
-    border: 1px solid var(--line); border-radius: 9px; background: var(--surface);
+    border: 1px solid var(--line); border-radius: var(--radius-lg);
+    background: var(--surface);
 }
-[data-testid="stExpander"] summary { font-size: 0.87rem; }
+[data-testid="stExpander"] summary {
+    font-size: 0.855rem; color: var(--text-2); font-weight: 520;
+}
+[data-testid="stExpander"] summary:hover { color: var(--text); }
 
-/* ---- Tabs: readable, with a clear selected state ---- */
+/* ---- Tabs ---- */
 [data-baseweb="tab-list"] {
-    gap: 0.15rem; border-bottom: 1px solid var(--line); padding-bottom: 0;
+    gap: 0.1rem; border-bottom: 1px solid var(--line); padding-bottom: 0;
 }
 [data-baseweb="tab"] {
-    color: var(--muted); font-size: 0.87rem; font-weight: 550;
-    padding: 0.5rem 0.85rem;
+    color: var(--muted); font-size: 0.86rem; font-weight: 520;
+    padding: 0.55rem 0.8rem;
 }
 [data-baseweb="tab"]:hover { color: var(--text-2); }
-[aria-selected="true"][role="tab"] { color: var(--text) !important; font-weight: 620; }
+[aria-selected="true"][role="tab"] { color: var(--text) !important; font-weight: 600; }
 
-.stMarkdown { line-height: 1.6; }
+/* ---- Type ---- */
+.stMarkdown { line-height: 1.65; font-size: 0.925rem; }
 .stMarkdown h1, .stMarkdown h2, .stMarkdown h3, .stMarkdown h4 {
-    color: var(--text); letter-spacing: -0.015em; font-weight: 640;
+    color: var(--text); letter-spacing: -0.02em; font-weight: 620;
 }
-.stMarkdown h4 { font-size: 1rem; margin-top: 1.4rem; }
+.stMarkdown h4 { font-size: 0.98rem; margin-top: 1.6rem; margin-bottom: 0.5rem; }
 .stMarkdown a { color: var(--primary); }
+.stMarkdown strong { font-weight: 600; color: var(--text); }
 
-[data-testid="stDataFrame"] { border: 1px solid var(--line); border-radius: 9px; }
+[data-testid="stDataFrame"] {
+    border: 1px solid var(--line); border-radius: var(--radius-lg);
+    font-variant-numeric: tabular-nums;
+}
 [data-testid="stMetric"] {
     background: var(--surface); border: 1px solid var(--line);
-    border-radius: 9px; padding: 0.75rem 0.9rem;
+    border-radius: var(--radius-lg); padding: 0.8rem 0.95rem;
 }
-code { font-size: 0.85em; }
-hr { border-color: var(--line); }
+[data-testid="stMetricValue"] { font-variant-numeric: tabular-nums; }
+
+[data-testid="stVerticalBlockBorderWrapper"] > div > div[data-testid="stVerticalBlock"] {
+    gap: 0.55rem;
+}
+code { font-size: 0.84em; background: var(--surface-raised); border-radius: 4px; }
+hr { border-color: var(--line); margin: 1.75rem 0; }
 
 @media (max-width: 768px) {
-    .block-container { padding-left: 0.75rem; padding-right: 0.75rem; }
-    .kpi .value { font-size: 1.4rem; }
-    .hero { padding: 1.1rem 1.2rem; }
-    .hero .title { font-size: 1.4rem; }
+    .block-container { padding-left: 0.85rem; padding-right: 0.85rem; }
+    .kpi .value { font-size: 1.45rem; }
+    .hero .title { font-size: 1.35rem; }
 }
 </style>
 """

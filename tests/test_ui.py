@@ -146,8 +146,8 @@ def test_workroom_renders_populated_analysis(app, tmp_path):
 
     rendered = " ".join(str(m.value) for m in at.markdown)
     assert "Test Product" in rendered
-    assert "MUST BUILD" in rendered
-    assert "DO NOT BUILD" in rendered, "the do-not-build verdict must be visible"
+    assert "Must build" in rendered
+    assert "Do not build" in rendered, "the do-not-build verdict must be visible"
 
 
 def _seed_strategy(conn, analysis):

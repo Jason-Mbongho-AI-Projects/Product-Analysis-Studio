@@ -414,6 +414,12 @@ def _tab_executive(data: dict[str, Any], mode: str = "founder") -> None:
     with right:
         st.markdown("#### Score profile")
         if scores:
+            # Horizontal bars, weakest first. Fifteen dimension names cannot be
+            # read rotated vertically, and st.bar_chart orders categories
+            # alphabetically - which buries the weak scores this view exists to
+            # surface. Altair gives explicit control of both.
+            import altair as alt
+
             frame = pd.DataFrame(
                 [
                     {
@@ -422,8 +428,28 @@ def _tab_executive(data: dict[str, Any], mode: str = "founder") -> None:
                     }
                     for s in scores
                 ]
-            ).set_index("Dimension")
-            st.bar_chart(frame, height=420, color=PALETTE["primary"])
+            )
+            chart = (
+                alt.Chart(frame)
+                .mark_bar(
+                    color=PALETTE["primary"], cornerRadiusEnd=3, height=13
+                )
+                .encode(
+                    x=alt.X(
+                        "Score:Q",
+                        scale=alt.Scale(domain=[0, 100]),
+                        axis=alt.Axis(title=None, grid=True, tickCount=5),
+                    ),
+                    y=alt.Y(
+                        "Dimension:N",
+                        sort=alt.EncodingSortField(field="Score", order="ascending"),
+                        axis=alt.Axis(title=None, labelLimit=180),
+                    ),
+                    tooltip=["Dimension", alt.Tooltip("Score:Q", format=".0f")],
+                )
+                .properties(height=max(300, 24 * len(scores)))
+            )
+            st.altair_chart(chart, use_container_width=True)
             st.caption(
                 "Inverted dimensions (competitive pressure, acquisition difficulty, "
                 "implementation complexity) are shown flipped so higher is always better."

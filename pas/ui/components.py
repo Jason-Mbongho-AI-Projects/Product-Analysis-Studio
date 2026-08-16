@@ -265,7 +265,7 @@ def format_price(value: float | None, suffix: str = "") -> str:
 
 
 def threat_chip(level: str) -> str:
-    return chip(level.upper(), THREAT_STYLES.get(level, PALETTE["muted"]))
+    return chip(level.capitalize(), THREAT_STYLES.get(level, PALETTE["muted"]))
 
 
 def confidence_chip(value: float) -> str:

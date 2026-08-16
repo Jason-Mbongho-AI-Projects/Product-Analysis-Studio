@@ -239,7 +239,7 @@ def _decide(service: StudioService, product: dict, analysis_id: str | None) -> N
     with tabs[0]:
         lead(
             "Each recommendation with its reasoning and evidence. Verdicts include "
-            "DO NOT BUILD - being told what to skip is as useful as what to ship."
+            "'Do not build' - being told what to skip is as useful as what to ship."
         )
         if not analysis_id:
             from .components import empty_state
