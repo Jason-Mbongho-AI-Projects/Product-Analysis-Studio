@@ -209,9 +209,7 @@ def _sidebar(service: StudioService, product: dict | None) -> str:
                 f"{len(mentions)} mention(s) awaiting you", icon=":material/alternate_email:"
             )
         st.caption(f"{esc(identity.label)} · {identity.role.label}")
-        if identity.is_dev:
-            st.warning("Auth disabled (dev)", icon=":material/lock_open:")
-        elif st.button("Sign out", width="stretch"):
+        if not identity.is_dev and st.button("Sign out", width="stretch"):
             token = st.session_state.pop(auth_pages.SESSION_TOKEN_KEY, "")
             if token:
                 service.auth.revoke_session(token)
@@ -438,20 +436,19 @@ def _dispatch(service: StudioService, route: str, product: dict | None) -> None:
 
 
 def _security_banner(service: StudioService) -> None:
-    """Make an unauthenticated deployment impossible to miss."""
+    """Warn only when an open app is actually reachable by other people.
+
+    Running open on localhost is a deliberate development choice, and a banner
+    repeating that on every screen is noise. Running open on an address other
+    machines can route to is a different situation entirely, and stays loud -
+    a warning nobody sees is worth nothing, but so is one everybody ignores.
+    """
     if service.config.auth_enabled:
         return
 
     exposure = network_exposure_warning(service.config.auth_enabled)
     if exposure:
-        # Reachable off-machine with no auth: this is not a dev convenience.
         st.error(exposure, icon=":material/gpp_bad:")
-    else:
-        st.caption(
-            ":material/lock_open: Development mode — authentication is disabled and "
-            "everyone has full access. Set `PAS_AUTH_ENABLED=true` before exposing "
-            "this to anyone else."
-        )
 
 
 if __name__ == "__main__":

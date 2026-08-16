@@ -402,13 +402,33 @@ def secured_app(tmp_path, monkeypatch):
     importlib.reload(config_module)
 
 
-def test_open_mode_shows_the_development_warning(app):
+def test_open_mode_is_quiet_on_localhost(app):
+    """A banner repeated on every screen is noise for a solo developer."""
     at = app.run()
     _assert_clean(at)
-    text = " ".join(str(c.value) for c in at.caption) + " ".join(
-        str(m.value) for m in at.markdown
-    )
-    assert "authentication is disabled" in text.lower()
+    text = (
+        " ".join(str(c.value) for c in at.caption)
+        + " ".join(str(m.value) for m in at.markdown)
+    ).lower()
+    assert "authentication is disabled" not in text
+    assert "auth disabled" not in text
+
+
+def test_open_mode_still_shouts_when_reachable_off_machine(monkeypatch):
+    """Quiet on loopback, loud when other machines can route to it.
+
+    This is the case the banner exists for, so removing the routine notice must
+    not remove this one.
+    """
+    from pas.config import network_exposure_warning
+
+    monkeypatch.setenv("STREAMLIT_SERVER_ADDRESS", "0.0.0.0")
+    warning = network_exposure_warning(auth_enabled=False)
+    assert warning is not None
+    assert "PAS_AUTH_ENABLED" in warning
+
+    # And silent once auth is on, whatever the binding.
+    assert network_exposure_warning(auth_enabled=True) is None
 
 
 def test_open_mode_requires_no_login(app):
